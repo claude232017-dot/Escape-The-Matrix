@@ -2,7 +2,8 @@ import { useState, type FormEvent } from 'react';
 import { Button } from '@/ui/Button';
 import { Field } from '@/ui/Field';
 import { useAuth } from '@/features/auth/AuthProvider';
-import { firstError, validateEmail } from '@/features/auth/validation';
+import { validateEmail } from '@/features/auth/validation';
+import { firstError } from '@/lib/field-validation';
 import { AuthShell, FormError } from '@/features/auth/components/AuthShell';
 
 /**

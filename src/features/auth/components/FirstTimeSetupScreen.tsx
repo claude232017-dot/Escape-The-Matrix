@@ -3,15 +3,13 @@ import { Button } from '@/ui/Button';
 import { Field } from '@/ui/Field';
 import { useAuth } from '@/features/auth/AuthProvider';
 import {
-  firstError,
   PASSWORD_MIN_LENGTH,
-  validateDisplayName,
   validateEmail,
   validatePassword,
   validatePasswordConfirmation,
-  validateTimezone,
 } from '@/features/auth/validation';
-import { guessTimezone, timezoneLabel, timezoneOptions } from '@/features/auth/timezone-options';
+import { firstError, validateDisplayName, validateTimezone } from '@/lib/field-validation';
+import { guessTimezone, timezoneLabel, timezoneOptions } from '@/lib/timezones';
 import { AuthShell, FormError } from '@/features/auth/components/AuthShell';
 
 /**

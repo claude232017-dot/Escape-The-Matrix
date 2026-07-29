@@ -1,7 +1,11 @@
 import { isValidTimeZone } from '@/lib/date';
 
 /**
- * Timezone choices for the setup screen.
+ * Timezone choices.
+ *
+ * In `lib` because both features need it: `auth` at signup, `profile` whenever a man moves or
+ * discovers the guess was wrong. A feature importing another feature is the knot the
+ * import-graph test rejects.
  *
  * Captured at signup, deliberately, because `profiles.timezone` decides every day count,
  * week boundary and SITREP deadline this man will ever have. Defaulting it silently to UTC

@@ -5,7 +5,7 @@ import {
   offsetLabel,
   timezoneLabel,
   timezoneOptions,
-} from '@/features/auth/timezone-options';
+} from '@/lib/timezones';
 
 describe('timezoneOptions', () => {
   it('offers a usable list', () => {

@@ -1,5 +1,63 @@
 # Changelog
 
+## Phase 1.1 — Groundwork the Forge needs
+
+Not a phase. Three things that had to exist before Phase 2 rather than alongside it.
+
+### Added
+
+**A profile screen.** Three of Phase 2's minimum effective doses reference member-specific
+artefacts — the **Top G Code** (which the Morning Protocol MED shows inline at the moment it
+asks him to read it aloud), the **Command Post**, and the **Fortress Protocol** — and there was
+no way to write any of them. The columns existed; the screen did not. Building it now means
+Phase 2 starts with the data it needs instead of stubbing around it.
+
+**The timezone is editable.** It could previously only be set at signup, and there was no
+remedy for getting it wrong. That stops being cosmetic the moment the Forge writes dates against
+it: a man on Asia/Beirut left as UTC would have everything filed between midnight and 3am land on
+the previous day. Capped textareas show remaining characters, because the caps are database
+constraints and discovering one after pressing Save is a bad way to learn it.
+
+**An error boundary.** A render throw previously produced a blank document — no message, no way
+out, nothing to relay. It now names what happened, says explicitly that filed work is not lost,
+shows the technical line rather than hiding it behind a toggle, and offers a reload. It
+deliberately reports nowhere: any future error reporter must not receive protocol detail
+(`docs/SECURITY.md` §2), and a boundary is the easiest place in the codebase to leak it by
+accident. That is a Phase 9 job with a scrubbing test attached.
+
+### Documentation debt closed
+
+`docs/DATA-MODEL.md` still described Phase 1's tables as planned when they had shipped, and its
+header still claimed `FORCE` RLS on every table — which Phase 1 had already contradicted. Both
+corrected, with every column, constraint, policy and grant now recorded.
+
+Two decisions had been made in commit messages and test comments but never as ADRs:
+
+- **ADR-010** — reversing the blanket `FORCE` RLS rule, and why the alternative (a permissive
+  policy to let the signup triggers through) would have been strictly worse.
+- **ADR-011** — `app.circle_membership`, the denormalisation that breaks RLS recursion, including
+  why the JWT-claim approach was rejected and when it would be worth revisiting.
+
+### Structural
+
+Profile-field validation and the timezone list moved to `lib`. Both are needed by `auth` at
+signup and by `profile` afterwards, and a feature importing another feature is the knot the
+import-graph test rejects — it caught this twice before the fix stuck, including once when the
+dependency had merely been hidden behind a re-export.
+
+### Verified
+
+225 unit tests, 47 database tests, 35 browser tests. `npm run verify` green.
+
+### Known gaps
+
+- The error boundary's *wiring* is not covered by an automated test — only the pure message
+  derivation is. Triggering a real render crash needs either a component-test environment
+  (jsdom, which the suite deliberately does not have) or a deliberate crash mechanism shipped in
+  the bundle. Stated rather than papered over.
+- No profile screen coverage in the browser suite: it only renders behind a session, and the
+  browser tests run without Supabase credentials by design.
+
 ## Phase 1 — Identity, circle, invitations
 
 **Goal: the right men get in and nobody else does.** Enforced in Postgres, because the anon

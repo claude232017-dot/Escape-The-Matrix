@@ -99,8 +99,13 @@ describe('module graph', () => {
 
     // An aliased edge from a feature into lib, which is the direction that must stay legal.
     const validationImports = (graph.get(join(SRC, 'features/auth/validation.ts')) ?? []).map(rel);
-    expect(validationImports).toContain('lib/date.ts');
     expect(validationImports).toContain('lib/email.ts');
+    expect(validationImports).toContain('lib/field-validation.ts');
+
+    // And a lib-internal edge: the profile field rules delegate the timezone question to the
+    // date module, which is what keeps the client rule identical to the SQL one.
+    const fieldImports = (graph.get(join(SRC, 'lib/field-validation.ts')) ?? []).map(rel);
+    expect(fieldImports).toContain('lib/date.ts');
   });
 
   it('has no import cycles', () => {

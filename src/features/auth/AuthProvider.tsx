@@ -29,6 +29,10 @@ export interface Profile {
   displayName: string;
   timezone: string;
   role: 'mentor' | 'member';
+  /** His creed, shown inline by the Morning Protocol MED. Null when never written. */
+  topGCode: string | null;
+  commandPostNote: string | null;
+  fortressProtocol: string | null;
   disclosureAcceptedAt: string | null;
   disclosureVersion: string | null;
 }
@@ -116,7 +120,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const fetchProfile = useCallback(async (userId: string): Promise<Profile | null> => {
     const { data, error: queryError } = await getSupabase()
       .from('profiles')
-      .select('id, circle_id, display_name, timezone, role, disclosure_accepted_at, disclosure_version')
+      .select(
+        'id, circle_id, display_name, timezone, role, top_g_code, command_post_note, fortress_protocol, disclosure_accepted_at, disclosure_version',
+      )
       .eq('id', userId)
       .maybeSingle();
 
@@ -130,6 +136,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       displayName: data.display_name as string,
       timezone: data.timezone as string,
       role: data.role as 'mentor' | 'member',
+      topGCode: data.top_g_code as string | null,
+      commandPostNote: data.command_post_note as string | null,
+      fortressProtocol: data.fortress_protocol as string | null,
       disclosureAcceptedAt: data.disclosure_accepted_at as string | null,
       disclosureVersion: data.disclosure_version as string | null,
     };

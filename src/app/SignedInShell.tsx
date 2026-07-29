@@ -1,21 +1,27 @@
+import { useState } from 'react';
 import { PHASE, PHASE_LABEL } from '@/app/build-info';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { InvitePanel } from '@/features/circle/components/InvitePanel';
+import { ProfileScreen } from '@/features/profile/components/ProfileScreen';
 import { Button } from '@/ui/Button';
 
 /**
  * What a signed-in member sees.
  *
- * Lives in `app` rather than in a feature because it is the wiring: it reads the session
- * from the auth feature and passes plain values down to the circle feature, so neither
- * feature imports the other.
+ * Lives in `app` rather than in a feature because it is the wiring: it reads the session from
+ * the auth feature and passes plain values down to the circle and profile features, so none of
+ * them import each other.
  *
- * Phase 1 has no Forge and no Ledger yet, so this is honest about what is missing rather
- * than showing empty widgets that imply the data is merely absent.
+ * Phase 1 has no Forge and no Ledger, so this is honest about what is missing rather than
+ * showing empty widgets that imply the data is merely absent.
  */
 export function SignedInShell() {
-  const { profile, signOut, busy } = useAuth();
+  const { profile, signOut, refreshProfile, busy } = useAuth();
+  const [editingProfile, setEditingProfile] = useState(false);
+
   if (!profile) return null; // Unreachable: AuthGate only renders this in the 'app' view.
+
+  const needsSetup = profile.topGCode === null;
 
   return (
     <>
@@ -34,13 +40,54 @@ export function SignedInShell() {
                 {profile.role === 'mentor' ? ' · mentor' : ''}
               </p>
             </div>
-            <Button variant="secondary" onClick={() => void signOut()} disabled={busy}>
-              Sign out
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="secondary"
+                onClick={() => setEditingProfile((open) => !open)}
+                aria-expanded={editingProfile}
+              >
+                {editingProfile ? 'Hide profile' : 'Profile'}
+              </Button>
+              <Button variant="secondary" onClick={() => void signOut()} disabled={busy}>
+                Sign out
+              </Button>
+            </div>
           </div>
         </header>
 
         <main id="main" className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-8 sm:px-6">
+          {/* Prompted rather than nagged, and only once there is a real reason: the Morning
+              Protocol cannot show him a Code he has not written. */}
+          {needsSetup && !editingProfile ? (
+            <section className="rounded-[var(--radius-lg)] border border-border-strong bg-surface-raised p-5">
+              <h2 className="text-sm font-semibold text-text-primary">
+                Write your Top G Code before the Forge opens
+              </h2>
+              <p className="mt-2 max-w-prose text-sm leading-relaxed text-text-secondary">
+                The Morning Protocol reads it back to you at the moment it asks you to say it
+                aloud. Without it, that protocol has nothing to show.
+              </p>
+              <Button className="mt-4" onClick={() => setEditingProfile(true)}>
+                Write it now
+              </Button>
+            </section>
+          ) : null}
+
+          {editingProfile ? (
+            <ProfileScreen
+              profileId={profile.id}
+              initial={{
+                displayName: profile.displayName,
+                timezone: profile.timezone,
+                topGCode: profile.topGCode,
+                commandPostNote: profile.commandPostNote,
+                fortressProtocol: profile.fortressProtocol,
+              }}
+              onSaved={refreshProfile}
+              onClose={() => setEditingProfile(false)}
+            />
+          ) : null}
+
           <section
             aria-labelledby="status-heading"
             className="rounded-[var(--radius-lg)] border border-border-subtle bg-surface-raised p-5 sm:p-6"

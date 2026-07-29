@@ -1,11 +1,17 @@
 # Data model
 
-**Status:** Phase 0 ships the baseline only. Everything under "Planned" is a sketch to be
-refined and migrated in its own phase; it is documented now because the shape of the
-schema decides what the product can ever answer.
+**Status:** Phases 0 and 1 have shipped. Everything under "Planned" is a sketch to be refined
+and migrated in its own phase; it is documented now because the shape of the schema decides
+what the product can ever answer.
 
-RLS is enabled **and forced** on every table, with no permissive default. A verb with no
-policy is denied — the absence *is* the enforcement.
+RLS is enabled on **every** table, with no permissive default. A verb with no policy is denied —
+the absence *is* the enforcement.
+
+`FORCE` row-level security is applied wherever it costs nothing, and deliberately **not** on the
+two tables a `SECURITY DEFINER` signup trigger must read or write: `FORCE` subjects the owner to
+its own policies, and the owner is who those functions run as, so forcing them would reject
+every signup. The exemptions are a reasoned list in `tests/db/rls-posture.test.ts`, asserted to
+be neither stale nor widened. See **ADR-010** — this reverses part of the Phase 0 posture.
 
 ---
 
@@ -46,33 +52,105 @@ bumps happen in migrations, which run as the owner.
 
 ---
 
-## Planned
+## Shipped in Phase 1
 
-### Identity and circle — Phase 1
+Identity, the circle, and invitations.
 
-- **`circles`** — the private group. One row for a long time; modelled anyway, because
-  retrofitting multi-tenancy is expensive and doing it now is nearly free.
-- **`profiles`** — `id` (FK `auth.users`), `display_name`, `timezone`, `role`
-  (`mentor` | `member`), `circle_id`, `top_g_code`, `command_post_note`.
-  `timezone` is not optional: every day count, week boundary and SITREP deadline is
-  computed against it.
-- **`invitations`** — `email`, `circle_id`, `token`, `expires_at`, `accepted_at`. The only
-  route to membership.
+### `public.circles`
 
-Two triggers on `auth.users`, with **opposite failure rules**, which is why they are two
-and not one:
+The private group. One row for a long time; modelled anyway, because retrofitting
+multi-tenancy is expensive and doing it now is nearly free — and every RLS predicate below is
+already scoped by it.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `uuid` PK | |
+| `name` | `text` | 1–80 chars (`circles_name_length`) |
+| `created_at` | `timestamptz` | |
+
+RLS enabled **and forced**. `SELECT` to a member of that circle; no other verb has a policy, so
+no other verb is permitted.
+
+### `public.profiles`
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `uuid` PK → `auth.users` | `ON DELETE CASCADE` — deletion means deletion (§3.5) |
+| `circle_id` | `uuid` → `circles` | `ON DELETE RESTRICT`; a circle with members cannot vanish |
+| `display_name` | `text` | 1–60 (`profiles_display_name_length`) |
+| `timezone` | `text` | CHECK `app.is_valid_timezone()`. Defaults `'UTC'` only so the signup trigger can never fail for want of a value |
+| `role` | `member_role` | `mentor` \| `member` |
+| `top_g_code` | `text` | ≤2000. His creed, shown inline by the Morning Protocol MED |
+| `command_post_note` | `text` | ≤500 |
+| `fortress_protocol` | `text` | ≤1000 |
+| `disclosure_accepted_at` | `timestamptz` | ADR-009 |
+| `disclosure_version` | `text` | ≤40 |
+| `created_at` / `updated_at` | `timestamptz` | `updated_at` maintained by trigger |
+
+`profiles_disclosure_complete` requires both disclosure columns or neither: a timestamp with no
+version cannot answer "what did he agree to", which is the only question it exists to answer.
+
+RLS enabled, **not forced** — see ADR-010. Policies: `SELECT` where `circle_id` matches the
+reader's; `UPDATE` where `id = auth.uid()`. **No `INSERT` policy**, deliberately — profiles are
+created only by the signup trigger, and the absence *is* the enforcement. No `DELETE` policy.
+
+Which columns a member may update is enforced by a **column-level grant**, not a policy:
+
+```sql
+grant update (display_name, timezone, top_g_code, command_post_note,
+              fortress_protocol, disclosure_accepted_at, disclosure_version)
+  on public.profiles to authenticated;
+```
+
+`role` and `circle_id` are simply not in the list, so self-promotion is rejected by the privilege
+system before any policy runs. `WITH CHECK` cannot see `OLD`, so a policy could not express this
+— and one that appeared to would be worse than an honest grant.
+
+### `public.invitations`
+
+The only route to membership.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `uuid` PK | |
+| `circle_id` | `uuid` → `circles` | `ON DELETE CASCADE` |
+| `email` | `text` | CHECK lowercase (`invitations_email_lowercase`) and shape (`invitations_email_shape`) |
+| `role` | `member_role` | the role the invitee will get |
+| `token` | `text` unique | 16–128 chars, from `crypto.getRandomValues` |
+| `invited_by` | `uuid` → `profiles` | `ON DELETE SET NULL` |
+| `expires_at` | `timestamptz` | CHECK later than `created_at` |
+| `accepted_at` | `timestamptz` | set by the signup trigger; consumes the invitation |
+| `created_at` | `timestamptz` | |
+
+Partial unique index `invitations_one_open_per_email` on `(email) WHERE accepted_at IS NULL` —
+one live invitation per address, so revoking means revoking rather than hunting duplicates.
+
+RLS enabled, **not forced** (ADR-010). All four verbs to the **mentor of that circle only**;
+members get nothing, and the invitee has no session to read it with anyway.
+
+### `app.circle_membership`
+
+A denormalised `profile_id → (circle_id, role)` map, maintained by trigger, that exists solely
+so RLS policies **on** `profiles` can ask "is this row in my circle?" without recursing through
+`profiles`. See **ADR-011**. Unreachable with a public key: `anon` and `authenticated` have no
+`USAGE` on `app`, asserted in `tests/db/rls-posture.test.ts`.
+
+### Signup: two triggers on `auth.users`, with opposite failure rules
 
 | Trigger | Timing | On error |
 |---|---|---|
-| Invite check | `BEFORE INSERT` | **Raises.** An uninvited email must not get an account. |
-| Profile creation | `AFTER INSERT`, `SECURITY DEFINER`, `search_path` pinned | **Never raises** — body wrapped in `EXCEPTION WHEN OTHERS THEN RAISE WARNING … RETURN NEW`. |
+| `auth_users_enforce_invite` → `app.enforce_invite_only()` | `BEFORE INSERT` | **Raises** (SQLSTATE 42501). An uninvited email must not get an account. |
+| `auth_users_create_profile` → `app.create_profile_for_new_user()` | `AFTER INSERT` | **Never raises.** Body wrapped in `EXCEPTION WHEN OTHERS THEN RAISE WARNING … RETURN NEW`. |
 
-A missing profile is recoverable; an uncreatable auth user is not. The auth layer surfaces
-any exception as an opaque "Database error saving new user" that tells the person nothing,
-and a client-side profile insert runs in a separate transaction — so a failure there leaves
-an auth user with no profile, an account that exists and cannot be used and reports
-"already registered" on retry with no way out. Putting the blocking check inside the
-swallowing trigger would enforce nothing.
+A missing profile is recoverable; an uncreatable auth user is not. GoTrue surfaces any exception
+from this path as an opaque "Database error saving new user" that tells the person nothing and
+reports "already registered" on retry. Putting the blocking check inside the swallowing trigger
+would enforce nothing — which is why these are two triggers and not one.
+
+Both are `SECURITY DEFINER` with `search_path` pinned to `''`. A `SECURITY DEFINER` function
+with a mutable `search_path` is a privilege-escalation primitive, not a helper.
+
+## Planned
 
 ### The Forge — Phase 2
 

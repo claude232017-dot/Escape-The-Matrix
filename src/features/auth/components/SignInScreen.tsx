@@ -6,11 +6,14 @@ import { firstError, validateEmail } from '@/features/auth/validation';
 import { AuthShell, FormError } from '@/features/auth/components/AuthShell';
 
 /**
- * Sign-in. **There is no signup form**, by design — membership comes from an invitation,
- * enforced by a trigger on auth.users, and a signup form would only offer a door that the
- * database refuses to open.
+ * Sign-in, with a route to first-time setup.
+ *
+ * There is no *open* signup: the setup screen behind that link submits to a database whose
+ * `BEFORE INSERT` trigger raises for any address without a live invitation. So the door is
+ * visible but the lock is in Postgres, which is the right place for it — an invited man can
+ * get himself in without the mentor handing out passwords over chat, and nobody else can.
  */
-export function SignInScreen() {
+export function SignInScreen({ onUseFirstTimeSetup }: { onUseFirstTimeSetup: () => void }) {
   const { signIn, requestPasswordReset, error, busy } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -85,6 +88,16 @@ export function SignInScreen() {
         <Button variant="quiet" onClick={onForgot} disabled={busy}>
           Forgotten your password?
         </Button>
+
+        {/* A real Button rather than a link-styled span inside the sentence. Inline text
+            gives a ~20px tap target, which is unusable one-handed on a phone — and the
+            browser test asserts 44px, which is how that got caught. */}
+        <div className="flex flex-col gap-2 border-t border-border-subtle pt-4">
+          <p className="text-sm text-text-muted">Been invited but never signed in?</p>
+          <Button variant="secondary" onClick={onUseFirstTimeSetup} disabled={busy}>
+            Set up your account
+          </Button>
+        </div>
       </form>
     </AuthShell>
   );

@@ -38,15 +38,10 @@ test.describe('signed out', () => {
     expect(errors, `console errors: ${errors.join(' | ')}`).toEqual([]);
   });
 
-  test('offers no way to create an account', async ({ page }) => {
-    // Membership comes from an invitation, enforced by a trigger on auth.users. A signup
-    // form would advertise a door the database refuses to open.
+  test('says plainly that it is invite only', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
     await expect(page.getByText('Invite only.', { exact: false })).toBeVisible();
-    await expect(page.getByRole('button', { name: /sign up|create account|register/i })).toHaveCount(
-      0,
-    );
   });
 
   test('shows no application content', async ({ page }) => {
@@ -233,17 +228,29 @@ test.describe('layout', () => {
     });
   }
 
-  test('keeps tap targets at least 44px tall on a phone', async ({ page }) => {
-    // Filing a SITREP one-handed on a 360px screen is a Phase 2 requirement; the controls
-    // have to be hittable before that is worth timing.
-    await page.setViewportSize({ width: 360, height: 800 });
-    await page.goto('/');
-    const heights = await page
-      .locator('button, input')
-      .evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().height)));
-    expect(heights.length).toBeGreaterThan(0);
-    expect(Math.min(...heights)).toBeGreaterThanOrEqual(44);
-  });
+  // Both signed-out screens: the setup form has the most controls and is where a small
+  // target is likeliest to appear. Filing a SITREP one-handed on a 360px screen is a Phase 2
+  // requirement, and the controls have to be hittable before that is worth timing.
+  for (const [label, path] of [
+    ['sign-in', '/'],
+    ['first-time setup', '/?join=1'],
+  ] as const) {
+    test(`keeps tap targets at least 44px tall on a phone — ${label}`, async ({ page }) => {
+      await page.setViewportSize({ width: 360, height: 800 });
+      await page.goto(path);
+      const targets = await page
+        .locator('button, input, select')
+        .evaluateAll((els) =>
+          els.map((el) => ({
+            height: Math.round(el.getBoundingClientRect().height),
+            html: el.outerHTML.slice(0, 80),
+          })),
+        );
+      expect(targets.length).toBeGreaterThan(0);
+      const tooSmall = targets.filter((t) => t.height < 44);
+      expect(tooSmall, `targets under 44px: ${JSON.stringify(tooSmall)}`).toEqual([]);
+    });
+  }
 });
 
 test.describe('design tokens', () => {
@@ -286,5 +293,116 @@ test.describe('reduced motion', () => {
       return value;
     });
     expect(parseFloat(duration)).toBeLessThan(0.05);
+  });
+});
+
+test.describe('first-time setup', () => {
+  test('is reachable from sign-in and back again', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Set up your account' }).click();
+    await expect(page.getByRole('heading', { name: 'First time here' })).toBeVisible();
+
+    await page.getByRole('button', { name: 'I already have an account' }).click();
+    await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
+  });
+
+  test('opens directly from a join link, so an invited man is not left guessing', async ({
+    page,
+  }) => {
+    await page.goto('/?join=1');
+    await expect(page.getByRole('heading', { name: 'First time here' })).toBeVisible();
+  });
+
+  test('tells him to use the exact invited address', async ({ page }) => {
+    // The single most common failure: signing up with a different address than the one
+    // invited, and getting an error that names nothing.
+    await page.goto('/?join=1');
+    await expect(page.getByText('exact email address', { exact: false })).toBeVisible();
+  });
+
+  test('captures the timezone at signup, with the offset shown', async ({ page }) => {
+    // Captured here because it is the last moment before it starts mattering: every day
+    // count, week boundary and SITREP deadline is measured against it.
+    await page.goto('/?join=1');
+    const zone = page.getByLabel('Timezone');
+    await expect(zone).toBeVisible();
+
+    const options = await zone.locator('option').count();
+    expect(options, 'expected a full timezone list').toBeGreaterThan(40);
+
+    // The offset is shown so the choice can be checked against a clock on the wall.
+    await expect(zone.locator('option', { hasText: /UTC/ }).first()).toBeAttached();
+    const labels = await zone.locator('option').allInnerTexts();
+    expect(labels.some((label) => /\([+-]\d{2}:\d{2}\)/.test(label))).toBe(true);
+  });
+
+  test('warns that a guessed timezone may be wrong', async ({ page }) => {
+    await page.goto('/?join=1');
+    await expect(page.getByText('holiday time', { exact: false })).toBeVisible();
+  });
+
+  test('validates before it ever reaches the database', async ({ page }) => {
+    await page.goto('/?join=1');
+    const submit = page.getByRole('button', { name: 'Create my account' });
+
+    await submit.click();
+    await expect(page.getByText('An email address is required.')).toBeVisible();
+
+    await page.getByLabel('Email').fill('not-an-email');
+    await submit.click();
+    await expect(page.getByText('That does not look like an email address.')).toBeVisible();
+
+    await page.getByLabel('Email').fill('friend@example.com');
+    await submit.click();
+    await expect(page.getByText('A name is required.')).toBeVisible();
+
+    await page.getByLabel('Name').fill('A Friend');
+    await page.getByLabel('Password', { exact: true }).fill('short');
+    await submit.click();
+    await expect(page.getByText('At least 12 characters', { exact: false })).toBeVisible();
+
+    await page.getByLabel('Password', { exact: true }).fill('a-long-enough-password');
+    await page.getByLabel('Confirm password').fill('something-else-entirely');
+    await submit.click();
+    await expect(page.getByText('The two passwords do not match.')).toBeVisible();
+  });
+
+  test('gives every control an accessible name', async ({ page }) => {
+    await page.goto('/?join=1');
+    await expect(page.getByRole('heading', { name: 'First time here' })).toBeVisible();
+    const unnamed = await page
+      .locator('a, button, input, select, textarea')
+      .evaluateAll((elements) =>
+        elements
+          .map((el) => {
+            const labels = (el as HTMLInputElement).labels;
+            const fromLabel = labels && labels.length > 0 ? (labels[0]?.textContent ?? '') : '';
+            return {
+              name: (el.getAttribute('aria-label') ?? (fromLabel || el.textContent) ?? '').trim(),
+              html: el.outerHTML.slice(0, 90),
+            };
+          })
+          .filter((entry) => entry.name === ''),
+      );
+    expect(unnamed, `unnamed controls: ${JSON.stringify(unnamed)}`).toEqual([]);
+  });
+
+  test('does not overflow at 320px, where the form is tallest', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 900 });
+    await page.goto('/?join=1');
+    await expect(page.getByRole('heading', { name: 'First time here' })).toBeVisible();
+    const overflow = await page.evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
+    }));
+    expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth);
+  });
+
+  test('a join link does not override a recovery link', async ({ page }) => {
+    // Both are read from the URL at first paint. Recovery must win, or a crafted link could
+    // route someone holding a recovery session into a form instead of the reset screen.
+    await page.goto('/?join=1&mode=reset');
+    await expect(page.getByRole('heading', { name: 'Set a new password' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'First time here' })).toHaveCount(0);
   });
 });

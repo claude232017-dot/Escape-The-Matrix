@@ -14,6 +14,14 @@ import { clearUserState } from '@/lib/local-state';
 import { isRecoveryUrl, stripRecoveryFromUrl } from '@/features/auth/recovery';
 import { resolveAuthView, type AuthView } from '@/features/auth/view';
 
+export interface SignUpInput {
+  email: string;
+  password: string;
+  displayName: string;
+  /** Captured at signup because every future day count is measured against it. */
+  timezone: string;
+}
+
 export interface Profile {
   id: string;
   circleId: string;
@@ -31,6 +39,8 @@ interface AuthContextValue {
   /** Non-null when the last operation failed. Plain text, safe to show. */
   error: string | null;
   signIn: (email: string, password: string) => Promise<void>;
+  /** Resolves to whether the man must confirm his email before he can sign in. */
+  signUpWithInvitation: (input: SignUpInput) => Promise<{ needsEmailConfirmation: boolean }>;
   signOut: () => Promise<void>;
   requestPasswordReset: (email: string) => Promise<void>;
   completePasswordReset: (newPassword: string) => Promise<void>;
@@ -198,6 +208,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const signUpWithInvitation = useCallback(
+    async (input: SignUpInput): Promise<{ needsEmailConfirmation: boolean }> => {
+      setBusy(true);
+      setOperationError(null);
+      try {
+        // Safe to expose precisely BECAUSE the BEFORE INSERT trigger on auth.users rejects
+        // an uninvited address. The gate is in the database; this form only reaches it.
+        const { data, error: authError } = await getSupabase().auth.signUp({
+          email: input.email.trim().toLowerCase(),
+          password: input.password,
+          options: {
+            // Read by app.create_profile_for_new_user() to populate the profile. The
+            // timezone especially: it decides every day count this man will ever have.
+            data: { display_name: input.displayName.trim(), timezone: input.timezone },
+            emailRedirectTo: window.location.origin,
+          },
+        });
+        if (authError) throw authError;
+        // A null session means GoTrue is configured to require email confirmation. Not an
+        // error, but the difference decides what the screen says next.
+        return { needsEmailConfirmation: data.session === null };
+      } catch (cause) {
+        setOperationError(messageFor(cause));
+        throw cause;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [],
+  );
+
   const signOut = useCallback(async () => {
     setBusy(true);
     try {
@@ -300,6 +341,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       error,
       busy,
       signIn,
+      signUpWithInvitation,
       signOut,
       requestPasswordReset,
       completePasswordReset,
@@ -313,6 +355,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       error,
       busy,
       signIn,
+      signUpWithInvitation,
       signOut,
       requestPasswordReset,
       completePasswordReset,
@@ -343,6 +386,20 @@ function messageFor(cause: unknown): string {
     if (/email not confirmed/i.test(raw)) return 'Confirm your email address first.';
     if (/signup_requires_invitation/i.test(raw)) {
       return 'That address has no live invitation. Ask the mentor for one.';
+    }
+    // GoTrue collapses any error raised by a trigger on auth.users into this one string, so
+    // the invite check's own message often never reaches the browser. Name the likely cause
+    // without asserting it — and deliberately do NOT add an "is this address invited?"
+    // endpoint to find out, because that would be an enumeration oracle for who is in the
+    // circle, which is the thing invite-only exists to protect.
+    if (/database error saving new user/i.test(raw)) {
+      return (
+        'Your account could not be created. The most likely reason is that this address has ' +
+        'no live invitation — check with the mentor that he used exactly this address.'
+      );
+    }
+    if (/user already registered|already been registered/i.test(raw)) {
+      return 'There is already an account for that address. Sign in instead, or reset your password.';
     }
     if (/rate limit|too many/i.test(raw)) return 'Too many attempts. Wait a minute and try again.';
     if (/row-level security|policy/i.test(raw)) return 'You do not have access to that.';

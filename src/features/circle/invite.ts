@@ -39,3 +39,12 @@ export function invitationExpiry(from: Date = new Date()): string {
   // eslint-disable-next-line no-restricted-syntax -- instant, not a calendar date
   return expires.toISOString();
 }
+
+/**
+ * The link to send with an invitation.
+ *
+ * Re-exported here so the invite UI has one obvious place to reach for, and so the reasoning
+ * about what the link is *not* stays next to the token generation: it carries no authority
+ * and deliberately contains no token. The gate is the BEFORE INSERT trigger on auth.users.
+ */
+export { buildJoinUrl as joinLink } from '@/lib/join-url';

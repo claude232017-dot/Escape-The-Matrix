@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { useAuth } from '@/features/auth/AuthProvider';
-import { SignInScreen } from '@/features/auth/components/SignInScreen';
+import { SignedOutScreens } from '@/features/auth/components/SignedOutScreens';
 import { ResetPasswordScreen } from '@/features/auth/components/ResetPasswordScreen';
 import { DisclosureScreen } from '@/features/auth/components/DisclosureScreen';
 import { ProfileMissingScreen } from '@/features/auth/components/ProfileMissingScreen';
@@ -29,7 +29,9 @@ export function AuthGate({ children }: { children: ReactNode }) {
         </AuthShell>
       );
     case 'sign-in':
-      return <SignInScreen />;
+      // Sign-in or first-time setup — a UI toggle inside this one branch, so the
+      // recovery rule above cannot be affected by it.
+      return <SignedOutScreens />;
     case 'reset-password':
       return <ResetPasswordScreen />;
     case 'disclosure':

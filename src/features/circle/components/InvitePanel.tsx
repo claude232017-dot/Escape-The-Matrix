@@ -5,7 +5,7 @@ import { getSupabase } from '@/lib/supabase';
 // From lib, not from features/auth: a feature importing another feature is the knot the
 // import-graph test rejects, and email validation was never auth-specific.
 import { isValidEmail, normaliseEmail } from '@/lib/email';
-import { generateInvitationToken, invitationExpiry } from '@/features/circle/invite';
+import { generateInvitationToken, invitationExpiry, joinLink } from '@/features/circle/invite';
 
 /**
  * The mentor's invitation list.
@@ -162,6 +162,15 @@ export function InvitePanel({
           {error}
         </p>
       ) : null}
+
+      <p className="mt-4 text-xs leading-relaxed text-text-muted">
+        Send them this link:{' '}
+        <span data-numeral className="break-all text-text-secondary">
+          {joinLink(window.location.origin)}
+        </span>
+        . It carries no authority — an uninvited address is turned away by the database, not by
+        the link.
+      </p>
 
       <ul className="mt-5 flex flex-col gap-2">
         {loaded && invitations.length === 0 ? (

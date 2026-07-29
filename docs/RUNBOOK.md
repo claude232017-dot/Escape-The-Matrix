@@ -90,6 +90,29 @@ incident.
 For a schema change that loses data, take a snapshot first — Supabase dashboard →
 Database → Backups — and record the snapshot ID in the migration's comment.
 
+## Bootstrapping a fresh project
+
+Invitations can only be created by a mentor, and a mentor can only exist by accepting an
+invitation. That circularity is deliberate — it is what makes the invite-only rule hold — so
+it is broken once, by hand, by the owner.
+
+1. Apply the migrations (SQL Editor, or `npm run db:apply`).
+2. Edit the email in `supabase/bootstrap/01_first_mentor.sql` and run it. Safe to re-run: it
+   reuses an existing circle, will not issue a duplicate live invitation, and does nothing
+   once the mentor has joined.
+3. Create the auth account for that address — **Authentication → Users → Add user**, with
+   "Auto Confirm User" ticked. The `BEFORE INSERT` trigger checks the invitation, the
+   `AFTER INSERT` trigger creates the profile as `mentor`, and the invitation is marked
+   accepted.
+4. Sign in. The invitation panel is now available, and everyone else joins through it.
+
+Verify:
+
+```sql
+select p.display_name, p.role, p.timezone, c.name as circle
+  from public.profiles p join public.circles c on c.id = p.circle_id;
+```
+
 ## Deploying
 
 Hosted on Vercel. Framework preset Vite, build `npm run build`, output `dist`.

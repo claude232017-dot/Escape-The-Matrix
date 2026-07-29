@@ -13,6 +13,7 @@ import { getSupabase, isSupabaseConfigured } from '@/lib/supabase';
 import { clearUserState } from '@/lib/local-state';
 import { isRecoveryUrl, stripRecoveryFromUrl } from '@/features/auth/recovery';
 import { resolveAuthView, type AuthView } from '@/features/auth/view';
+import { authErrorMessage } from '@/features/auth/error-message';
 
 export interface SignUpInput {
   email: string;
@@ -72,6 +73,19 @@ const INITIAL_RECOVERY =
 const SUPABASE_CONFIGURED = isSupabaseConfigured();
 const NOT_CONFIGURED_MESSAGE =
   'This deployment has no Supabase configuration. See docs/RUNBOOK.md.';
+
+/**
+ * Map for display, and log the raw value.
+ *
+ * The log is not belt-and-braces — it is the only place the original error survives. When a
+ * member reports "it says the server gave no reason", the browser console is what turns that
+ * into a diagnosis. Auth errors carry no protocol detail, so there is nothing here that
+ * §3.5 would keep out of a log.
+ */
+function messageFor(cause: unknown): string {
+  console.error('[auth]', cause);
+  return authErrorMessage(cause);
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
@@ -371,39 +385,4 @@ export function useAuth(): AuthContextValue {
   const context = useContext(AuthContext);
   if (!context) throw new Error('useAuth must be used inside <AuthProvider>');
   return context;
-}
-
-/**
- * Turn an unknown thrown value into something safe to put on screen.
- *
- * Deliberately does not pass a raw Postgres error through: a policy violation message can
- * name tables and columns, and it tells the person nothing they can act on.
- */
-function messageFor(cause: unknown): string {
-  if (typeof cause === 'object' && cause !== null && 'message' in cause) {
-    const raw = String((cause as { message: unknown }).message);
-    if (/invalid login credentials/i.test(raw)) return 'That email and password do not match.';
-    if (/email not confirmed/i.test(raw)) return 'Confirm your email address first.';
-    if (/signup_requires_invitation/i.test(raw)) {
-      return 'That address has no live invitation. Ask the mentor for one.';
-    }
-    // GoTrue collapses any error raised by a trigger on auth.users into this one string, so
-    // the invite check's own message often never reaches the browser. Name the likely cause
-    // without asserting it — and deliberately do NOT add an "is this address invited?"
-    // endpoint to find out, because that would be an enumeration oracle for who is in the
-    // circle, which is the thing invite-only exists to protect.
-    if (/database error saving new user/i.test(raw)) {
-      return (
-        'Your account could not be created. The most likely reason is that this address has ' +
-        'no live invitation — check with the mentor that he used exactly this address.'
-      );
-    }
-    if (/user already registered|already been registered/i.test(raw)) {
-      return 'There is already an account for that address. Sign in instead, or reset your password.';
-    }
-    if (/rate limit|too many/i.test(raw)) return 'Too many attempts. Wait a minute and try again.';
-    if (/row-level security|policy/i.test(raw)) return 'You do not have access to that.';
-    return raw;
-  }
-  return 'Something went wrong. Try again.';
 }

@@ -29,6 +29,36 @@ const UNCONDITIONAL_READ_IS_INTENTIONAL: Record<string, string> = {
     'member by design; there is no per-member dimension to restrict it on.',
 };
 
+/**
+ * Tables where `FORCE ROW LEVEL SECURITY` is deliberately absent.
+ *
+ * Phase 0 asserted FORCE on every table. That was wrong, and Phase 1 is where it broke:
+ * FORCE makes the *table owner* subject to the table's policies, and the owner is exactly
+ * who `SECURITY DEFINER` functions run as. A signup trigger that must read
+ * `public.invitations` before any session exists has `auth.uid() = null`, so under FORCE
+ * the mentor-only policy matches nothing and **every signup is rejected**.
+ *
+ * FORCE is not load-bearing in this architecture: application traffic arrives through
+ * PostgREST as `anon` or `authenticated` and never as the owner, so FORCE constrains only
+ * migrations and the trigger functions — both of which are trusted code in this
+ * repository. What actually enforces isolation is the policies plus the grants, and those
+ * are asserted directly by tests/db/identity-rls.test.ts.
+ *
+ * The exemption is a list with reasons rather than a dropped assertion, so a future table
+ * cannot lose FORCE silently.
+ */
+const FORCE_RLS_NOT_REQUIRED: Record<string, string> = {
+  'public.profiles':
+    'app.create_profile_for_new_user() INSERTs here as the owner during signup. There is ' +
+    'no INSERT policy by design (profiles are created only by that trigger), so under ' +
+    'FORCE the insert would be denied and every new member would get an account with no ' +
+    'profile.',
+  'public.invitations':
+    'app.enforce_invite_only() and app.create_profile_for_new_user() read here as the ' +
+    'owner before the user has a session. Under FORCE, auth.uid() is null, the ' +
+    'mentor-only policy matches nothing, and every signup is rejected.',
+};
+
 interface PolicyRow {
   schemaname: string;
   tablename: string;
@@ -73,7 +103,10 @@ describeDb('database security posture', () => {
       'select schema_version, doctrine_version from public.app_meta',
     );
     expect(rows).toHaveLength(1);
-    expect(rows[0]?.schema_version).toBe(1);
+    // Bumped by the latest migration. Asserting the exact number rather than ">= 1" so
+    // that a migration which forgets to bump it is caught here.
+    expect(rows[0]?.schema_version).toBe(2);
+    expect(rows[0]?.doctrine_version).toBe('2026.07-draft');
   });
 
   it('re-applies cleanly, because a human will paste this into a SQL editor', async () => {
@@ -108,9 +141,10 @@ describeDb('database security posture', () => {
     expect(unprotected, `tables in public without RLS: ${unprotected.join(', ')}`).toEqual([]);
   });
 
-  it('forces row-level security, so the table owner is not exempt', async () => {
-    // Without FORCE, the owning role bypasses its own policies. Any code path that ends
-    // up connected as the owner then reads everything, and the policies look fine.
+  it('forces row-level security except where a signup trigger must bypass it', async () => {
+    // Without FORCE, the owning role bypasses its own policies — which is required for the
+    // signup triggers and wrong for everything else. Hence a reasoned exemption list
+    // rather than either a blanket assertion or a dropped one.
     const { rows } = await client.query<{ relname: string; relforcerowsecurity: boolean }>(
       `select c.relname, c.relforcerowsecurity
          from pg_class c
@@ -118,8 +152,33 @@ describeDb('database security posture', () => {
         where n.nspname = 'public' and c.relkind = 'r'
         order by c.relname`,
     );
-    const notForced = rows.filter((r) => !r.relforcerowsecurity).map((r) => r.relname);
-    expect(notForced, `tables in public without FORCE RLS: ${notForced.join(', ')}`).toEqual([]);
+    const unexplained = rows
+      .filter((r) => !r.relforcerowsecurity)
+      .filter((r) => !(`public.${r.relname}` in FORCE_RLS_NOT_REQUIRED))
+      .map((r) => r.relname);
+    expect(
+      unexplained,
+      'tables without FORCE RLS that are not recorded as intentional — either force it ' +
+        'or add the table to FORCE_RLS_NOT_REQUIRED with the reason',
+    ).toEqual([]);
+  });
+
+  it('keeps the FORCE exemption list honest', async () => {
+    // An exemption for a table that has since gained FORCE, or that no longer exists, is
+    // stale documentation pretending to be a decision.
+    const { rows } = await client.query<{ relname: string; relforcerowsecurity: boolean }>(
+      `select c.relname, c.relforcerowsecurity
+         from pg_class c
+         join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = 'public' and c.relkind = 'r'`,
+    );
+    const byName = new Map(rows.map((r) => [`public.${r.relname}`, r.relforcerowsecurity]));
+    for (const exempt of Object.keys(FORCE_RLS_NOT_REQUIRED)) {
+      expect(byName.has(exempt), `${exempt} is exempted but does not exist`).toBe(true);
+      expect(byName.get(exempt), `${exempt} is exempted but now has FORCE — drop the exemption`).toBe(
+        false,
+      );
+    }
   });
 
   it('leaves no table with RLS enabled but no policy at all', async () => {

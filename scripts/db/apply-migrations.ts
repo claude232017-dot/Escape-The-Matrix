@@ -78,6 +78,14 @@ export async function applyMigrations(
       await client.query('drop schema if exists app cascade');
       await client.query('drop schema if exists public cascade');
       await client.query('create schema public');
+      if (options.withShim) {
+        // The shimmed `auth` schema must be reset too, or `auth.users` keeps rows from the
+        // previous run and the next one collides on the email unique index — which reads
+        // as a broken test rather than a dirty database. Only ever reached with the shim,
+        // i.e. never against a real project, where dropping `auth` would be catastrophic;
+        // assertSafeToReset() has already established the host is local.
+        await client.query('drop schema if exists auth cascade');
+      }
     }
     if (options.withShim) {
       await client.query('begin');

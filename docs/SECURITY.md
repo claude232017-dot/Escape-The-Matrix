@@ -125,13 +125,39 @@ Filled in per phase. Every cell gets a test. Phase 9 requires a passing test per
 |---|---|---|---|---|---|
 | `app_meta` | `anon` | ✗ | ✗ | ✗ | ✗ |
 | `app_meta` | `authenticated` | ✓ all | ✗ | ✗ | ✗ |
-| `app_meta` | `mentor` | ✓ all | ✗ | ✗ | ✗ |
-
-*Rows for `profiles`, `invitations`, `circles` land with Phase 1; the Forge tables with
-Phase 2.*
+| `circles` | `anon` | ✗ | ✗ | ✗ | ✗ |
+| `circles` | member | ✓ own circle | ✗ | ✗ | ✗ |
+| `circles` | mentor | ✓ own circle | ✗ | ✗ | ✗ |
+| `profiles` | `anon` | ✗ | ✗ | ✗ | ✗ |
+| `profiles` | member | ✓ circle | ✗ | ✓ own, **7 columns only** | ✗ |
+| `profiles` | mentor | ✓ circle | ✗ | ✓ own, **7 columns only** | ✗ |
+| `invitations` | `anon` | ✗ | ✗ | ✗ | ✗ |
+| `invitations` | member | ✗ | ✗ | ✗ | ✗ |
+| `invitations` | mentor | ✓ own circle | ✓ own circle | ✓ own circle | ✓ own circle |
 
 Legend: ✓ own — own rows only. ✓ circle — rows in the member's circle. ✓ all —
-unrestricted. ✗ — no policy, therefore denied.
+unrestricted. ✗ — no policy or no grant, therefore denied.
+
+Every cell above has a passing test in `tests/db/identity-rls.test.ts`, run as a real
+`authenticated` session with real JWT claims.
+
+### Two enforcement details worth knowing
+
+**`profiles` UPDATE is limited by a column-level grant, not by a policy.** `role` and
+`circle_id` are simply not in the `GRANT UPDATE (...)` list, so an attempt to change them
+is rejected by the privilege system before any policy runs. This is deliberate: `WITH
+CHECK` cannot see `OLD`, so it cannot express "role must not change" — a policy that
+appeared to prevent privilege escalation but did not would be worse than an honest grant.
+The seven grantable columns are `display_name`, `timezone`, `top_g_code`,
+`command_post_note`, `fortress_protocol`, `disclosure_accepted_at`, `disclosure_version`.
+
+**`profiles` and `invitations` do not have `FORCE` RLS, on purpose.** `FORCE` makes the
+table *owner* subject to the table's policies, and the owner is who `SECURITY DEFINER`
+functions run as. The signup triggers must read `invitations` and insert into `profiles`
+before any session exists — where `auth.uid()` is null — so under `FORCE` every signup
+would be rejected. `FORCE` is not load-bearing here: application traffic arrives as
+`anon` or `authenticated` and never as the owner. The exemption is a list with reasons in
+`tests/db/rls-posture.test.ts`, asserted to be neither stale nor silently widened.
 
 ---
 

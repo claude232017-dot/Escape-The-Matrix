@@ -1,0 +1,41 @@
+/* GENERATED FILE — do not edit.
+ * Source: src/design/tokens.ts   Regenerate: npm run tokens:build
+ *
+ * Colours live in TypeScript so the contrast suite can measure them. Editing this file
+ * by hand would place a colour outside the reach of that test, so the build fails if
+ * this file and its source have drifted.
+ */
+
+:root {
+  --colour-surface-void: #05070A;
+  --colour-surface-base: #0A0E13;
+  --colour-surface-raised: #121820;
+  --colour-surface-overlay: #1A222C;
+  --colour-surface-sunken: #070A0E;
+  --colour-border-subtle: #2E3D52;
+  --colour-border-strong: #64768B;
+  --colour-text-primary: #E8EDF2;
+  --colour-text-secondary: #AFBECC;
+  --colour-text-muted: #8A9AAB;
+  --colour-accent: #4ADE9B;
+  --colour-accent-strong: #79F0BC;
+  --colour-accent-ink: #04120B;
+  --colour-status-pass: #4ADE9B;
+  --colour-status-med: #F0B93B;
+  --colour-status-fail: #FF7A6B;
+  --colour-status-treason: #FF4D5E;
+  --colour-status-pending: #8A9AAB;
+  --colour-focus: #7DD3FC;
+
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 8px;
+  --space-unit: 4px;
+  --ring-width: 2px;
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+  --duration-slow: 320ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+}

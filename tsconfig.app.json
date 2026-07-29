@@ -1,0 +1,37 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    // ES2023 for Intl.NumberFormat's StringNumericLiteral overload: money is formatted
+    // from an exact decimal string, never a number. See src/lib/money.ts.
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "jsx": "react-jsx",
+
+    /* strict is the whole point; noUnusedLocals/Parameters are required by the build spec */
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+
+    // No baseUrl: it is deprecated in TS 6 and removed in 7. `paths` without it resolves
+    // relative to this file, which is what we wanted anyway.
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+    "types": ["vite/client", "node"]
+  },
+  "include": ["src", "tests/unit", "tests/db"]
+}

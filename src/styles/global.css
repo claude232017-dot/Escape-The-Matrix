@@ -1,0 +1,95 @@
+@import 'tailwindcss';
+@import './tokens.css';
+
+/* Bridge the generated custom properties into Tailwind's theme so that `bg-surface-base`
+   and `text-accent` resolve to the same values the contrast suite measures. Tailwind v4
+   reads @theme at build time; the indirection means a colour has exactly one origin
+   (src/design/tokens.ts) and no component can invent one. */
+@theme {
+  --color-surface-void: var(--colour-surface-void);
+  --color-surface-base: var(--colour-surface-base);
+  --color-surface-raised: var(--colour-surface-raised);
+  --color-surface-overlay: var(--colour-surface-overlay);
+  --color-surface-sunken: var(--colour-surface-sunken);
+  --color-border-subtle: var(--colour-border-subtle);
+  --color-border-strong: var(--colour-border-strong);
+  --color-text-primary: var(--colour-text-primary);
+  --color-text-secondary: var(--colour-text-secondary);
+  --color-text-muted: var(--colour-text-muted);
+  --color-accent: var(--colour-accent);
+  --color-accent-strong: var(--colour-accent-strong);
+  --color-accent-ink: var(--colour-accent-ink);
+  --color-status-pass: var(--colour-status-pass);
+  --color-status-med: var(--colour-status-med);
+  --color-status-fail: var(--colour-status-fail);
+  --color-status-treason: var(--colour-status-treason);
+  --color-status-pending: var(--colour-status-pending);
+  --color-focus: var(--colour-focus);
+
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+}
+
+html {
+  background-color: var(--colour-surface-void);
+  color-scheme: dark;
+  /* Belt and braces against horizontal overflow: the browser tests assert
+     scrollWidth <= clientWidth at nine widths, and this stops a single wide child from
+     making the whole page pan sideways on a 320px phone. */
+  overflow-x: hidden;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background-color: var(--colour-surface-void);
+  color: var(--colour-text-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Numerals are tabular everywhere. A campaign day, a protocol count and a revenue figure
+   are all meant to be scanned down a column. */
+.numeral,
+[data-numeral] {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* One visible focus style for the whole app. Removing an outline without replacing it is
+   how keyboard users lose their place, so this is defined once and never unset. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: var(--ring-width) solid var(--colour-focus);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* Honoured globally, in one place, as required. Framer Motion is additionally told to
+   reduce motion via MotionConfig — this rule covers CSS transitions and anything that
+   never goes through the animation library. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Skip link: visually hidden until focused. */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 100;
+  padding: 0.75rem 1rem;
+  background-color: var(--colour-surface-overlay);
+  color: var(--colour-text-primary);
+}
+
+.skip-link:focus {
+  left: 0;
+}

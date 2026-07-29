@@ -1,0 +1,28 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    // DOM is here and deliberately absent from tsconfig.node.json: the bodies of
+    // page.evaluate() run inside the browser and legitimately touch `document`, while a
+    // build script that reaches for `document` is a mistake worth catching.
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+    "types": ["node"]
+  },
+  "include": ["tests/browser", "playwright.config.ts"]
+}

@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Escape The Matrix">
+  <rect width="32" height="32" rx="4" fill="#05070A"/>
+  <rect x="0.75" y="0.75" width="30.5" height="30.5" rx="3.25" fill="none" stroke="#2E3D52" stroke-width="1.5"/>
+  <path d="M11 9h10M11 16h7M11 23h10" stroke="#4ADE9B" stroke-width="2.5" stroke-linecap="square"/>
+</svg>

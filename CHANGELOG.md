@@ -1,5 +1,76 @@
 # Changelog
 
+## Phase 1 — Identity, circle, invitations
+
+**Goal: the right men get in and nobody else does.** Enforced in Postgres, because the anon
+key is public and anything checked only in the browser is decoration.
+
+### Added
+
+**Three tables and two triggers** (`0002_identity.sql`). `circles`, `profiles`,
+`invitations`. The `auth.users` triggers are deliberately separate because their obligations
+are opposite: the invite check **raises** (an uninvited address must not get an account),
+profile creation **never raises** (a missing profile is recoverable; an uncreatable auth user
+is not, and GoTrue reports it as an opaque "Database error saving new user" and then
+"already registered" on every retry).
+
+**Privilege escalation blocked by a column-level grant**, not a policy. `WITH CHECK` cannot
+see `OLD`, so it cannot express "role must not change"; `role` and `circle_id` are simply not
+in `GRANT UPDATE`, and the privilege system rejects the attempt before any policy runs.
+
+**`app.circle_membership`**, a small denormalisation in the ungranted `app` schema. An RLS
+policy on `profiles` asking "is this row in my circle?" must read the reader's circle from
+`profiles` — infinite recursion, which Postgres reports without naming the policy. Reading it
+from elsewhere breaks the cycle by construction.
+
+**The recovery hold** (§3.7). The reset screen is pinned from the **first paint**, decided
+synchronously from a URL parameter we control rather than awaited from the auth library, and
+`PASSWORD_RECOVERY` is handled explicitly. Recovery outranks every other view including a
+fully valid session — a recovery link creates a real session, so if anything else could win,
+the emailed link would be a standing credential for whoever can read the inbox.
+
+**Sign-out clears local state** (§3.8). Keys are namespaced `etm:<userId>:<name>` and the
+signing-out member's namespace is emptied. Scoped to him rather than wiping everything: on a
+shared device another member's queued work is his, will only flush under his own session, and
+destroying it would lose a SITREP he believes was saved.
+
+**The enrollment disclosure** (ADR-009), as a blocking step with recorded acceptance. It
+states in plain words that the mentor sees protocol detail in full, including the
+sexual-discipline and substance protocols. A `CHECK` rejects a timestamp with no version,
+because that cannot answer what he actually agreed to.
+
+**Screens**: sign-in (no signup form — membership comes from an invitation), reset, disclosure,
+a named `profile-missing` screen for the orphaned-profile failure, and the mentor's invitation
+list. Invitation tokens come from `crypto.getRandomValues`, never `Math.random`.
+
+### Verified
+
+- 185 unit tests, 44 database tests against real Postgres with real JWT claims, 25 browser
+  tests. `npm run verify` green.
+- Uninvited signup rejected at the **API boundary** — a direct `insert into auth.users`, which
+  is what GoTrue itself does.
+- Member A gets **zero rows** from member B, every table, every verb.
+- `0002` applies cleanly three times in a row.
+- **Mutation-tested.** Four bugs reintroduced one at a time: `USING (true)` (3 tests fail),
+  `role`/`circle_id` added to the update grant (2), invite check downgraded to a warning (3),
+  and recovery losing its priority in the view resolver (2 unit + 5 browser).
+
+### Corrected from Phase 0
+
+The RLS guardrail asserted `FORCE` on every table. `FORCE` makes the owner subject to
+policies, and the owner is who `SECURITY DEFINER` functions run as — so the signup triggers
+could not read `invitations` or insert a profile, and **every signup would fail**. `FORCE` is
+not load-bearing here because application traffic never arrives as the owner. Replaced with a
+reasoned exemption list that is itself asserted to be neither stale nor widened.
+
+### Known gaps
+
+- The disclosure text is not yet versioned against a stored copy, so a past acceptance
+  resolves to a version string rather than to the exact wording. Phase 2.
+- No rate limiting on auth beyond Supabase's defaults. Phase 9.
+- `docs/DOCTRINE.md` §10 still has four open questions; protocol activation days block the
+  Phase 2 seed migration.
+
 ## Phase 0 — Foundation and guardrails
 
 The goal of this phase was not features. It was to make a specific list of bug classes

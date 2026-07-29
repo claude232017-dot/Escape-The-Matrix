@@ -84,16 +84,23 @@ describe('module graph', () => {
     // Without this, a broken walk would make every assertion below vacuously true.
     expect(files.length).toBeGreaterThan(5);
     expect(files.map(rel)).toContain('lib/date.ts');
-    expect(files.map(rel)).toContain('features/shell/components/AppShell.tsx');
+    expect(files.map(rel)).toContain('features/auth/AuthProvider.tsx');
   });
 
   it('resolves the aliased and relative imports it finds', () => {
     const edges = [...graph.values()].flat();
     expect(edges.length).toBeGreaterThan(3);
-    // A specific known edge, so a silently-failing resolver is caught.
+    // Specific known edges, so a silently-failing resolver is caught. Without these, a
+    // resolver that returned nothing would make every rule below vacuously true.
     const appImports = (graph.get(join(SRC, 'app/App.tsx')) ?? []).map(rel);
-    expect(appImports).toContain('features/shell/components/AppShell.tsx');
     expect(appImports).toContain('app/Motion.tsx');
+    expect(appImports).toContain('features/auth/AuthProvider.tsx');
+    expect(appImports).toContain('features/auth/components/AuthGate.tsx');
+
+    // An aliased edge from a feature into lib, which is the direction that must stay legal.
+    const validationImports = (graph.get(join(SRC, 'features/auth/validation.ts')) ?? []).map(rel);
+    expect(validationImports).toContain('lib/date.ts');
+    expect(validationImports).toContain('lib/email.ts');
   });
 
   it('has no import cycles', () => {

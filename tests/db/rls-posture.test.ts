@@ -247,10 +247,52 @@ describeDb('database security posture', () => {
   });
 
   it('does not expose the app helper schema through the API', async () => {
-    const { rows } = await client.query<{ has: boolean }>(
-      `select has_schema_privilege('authenticated', 'app', 'usage') as has`,
+    // Both roles, not just `authenticated`. Supabase's own SQL linter flags any table
+    // without RLS regardless of schema, and while its warning about app.circle_membership
+    // was factually wrong — no public key can reach it — it was right that this suite only
+    // ever inspected `public`. These assertions are the answer to that.
+    for (const role of ['anon', 'authenticated']) {
+      const { rows } = await client.query<{ has: boolean }>(
+        `select has_schema_privilege($1, 'app', 'usage') as has`,
+        [role],
+      );
+      expect(rows[0]?.has, `${role} has USAGE on schema app`).toBe(false);
+    }
+  });
+
+  it('grants no public role any privilege on an app table', async () => {
+    const { rows } = await client.query<{ grantee: string; table_name: string; privilege_type: string }>(
+      `select grantee, table_name, privilege_type
+         from information_schema.role_table_grants
+        where table_schema = 'app' and grantee in ('anon', 'authenticated')`,
     );
-    expect(rows[0]?.has).toBe(false);
+    expect(
+      rows.map((r) => `${r.grantee}:${r.table_name}:${r.privilege_type}`),
+      'a public role holds a grant inside the app schema',
+    ).toEqual([]);
+  });
+
+  it('enables RLS on app tables too, as a second line behind the schema grant', async () => {
+    // The schema grant is the real defence. RLS here is what makes a future migration that
+    // accidentally grants USAGE a non-event rather than a disclosure.
+    const { rows } = await client.query<{ relname: string; relrowsecurity: boolean }>(
+      `select c.relname, c.relrowsecurity
+         from pg_class c join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = 'app' and c.relkind = 'r'
+        order by c.relname`,
+    );
+    expect(rows.length, 'expected at least one table in the app schema').toBeGreaterThan(0);
+    const unprotected = rows.filter((r) => !r.relrowsecurity).map((r) => r.relname);
+    expect(unprotected, `app tables without RLS: ${unprotected.join(', ')}`).toEqual([]);
+  });
+
+  it('gives app tables no policies at all, so only the owner can read them', async () => {
+    // Deliberately empty: the SECURITY DEFINER predicates run as the owner, which bypasses
+    // RLS because FORCE is not set. Any policy here would be a way in for somebody else.
+    const { rows } = await client.query<{ tablename: string; policyname: string }>(
+      `select tablename, policyname from pg_policies where schemaname = 'app'`,
+    );
+    expect(rows.map((r) => `${r.tablename}.${r.policyname}`)).toEqual([]);
   });
 
   it('caps structured prose in the database, not only in the browser', async () => {

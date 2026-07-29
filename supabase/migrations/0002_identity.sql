@@ -168,6 +168,14 @@ create table if not exists app.circle_membership (
 
 create index if not exists circle_membership_circle_idx on app.circle_membership (circle_id);
 
+-- Belt and braces. `anon` and `authenticated` have no USAGE on the `app` schema, so this
+-- table is already unreachable with a public key — asserted directly in
+-- tests/db/rls-posture.test.ts. RLS is enabled anyway, with **no policies at all**, so that
+-- if some future migration ever grants schema usage by accident the table still yields
+-- nothing. The owner is unaffected because FORCE is deliberately not set, which is what lets
+-- the SECURITY DEFINER predicates below keep reading it.
+alter table app.circle_membership enable row level security;
+
 create or replace function app.sync_circle_membership()
 returns trigger
 language plpgsql
@@ -439,4 +447,7 @@ grant update (
 
 grant select, insert, update, delete on public.invitations to authenticated;
 
-update public.app_meta set schema_version = 2, updated_at = now();
+-- `where id` rather than a bare UPDATE. The table is single-row by CHECK constraint so the
+-- effect is identical, but an unqualified UPDATE is worth flagging in review every time, and
+-- a migration should not be the place people learn to ignore that warning.
+update public.app_meta set schema_version = 2, updated_at = now() where id;

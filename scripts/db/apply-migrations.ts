@@ -27,11 +27,49 @@ export interface ApplyOptions {
   log?: (message: string) => void;
 }
 
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]', '0.0.0.0']);
+
+/**
+ * Refuse to drop the schema of anything that is not a local throwaway database.
+ *
+ * `fresh` issues `drop schema public cascade`. The test harness sets it on every run, and
+ * `DATABASE_URL` is the same variable used to point at a real Supabase project — so a
+ * single stale export in a shell is the whole distance between "run the tests" and
+ * "destroy production". That is too short a distance for a flag nobody re-reads.
+ *
+ * The override exists because a remote *throwaway* database is a legitimate thing to
+ * reset in CI; it has to be stated deliberately, per invocation.
+ */
+function assertSafeToReset(connectionString: string): void {
+  if (process.env['ALLOW_DESTRUCTIVE_DB_RESET'] === '1') return;
+
+  let host: string;
+  try {
+    host = new URL(connectionString).hostname;
+  } catch {
+    // An unparseable connection string is not demonstrably local, so it is not safe.
+    host = '<unparseable>';
+  }
+
+  if (!LOCAL_HOSTS.has(host)) {
+    throw new Error(
+      `Refusing to drop the public schema on non-local host ${JSON.stringify(host)}.\n` +
+        `This would run "drop schema public cascade" and destroy every table there, ` +
+        `including any not created by this project.\n` +
+        `If that is genuinely what you want on a throwaway database, re-run with ` +
+        `ALLOW_DESTRUCTIVE_DB_RESET=1.`,
+    );
+  }
+}
+
 export async function applyMigrations(
   connectionString: string,
   options: ApplyOptions,
 ): Promise<string[]> {
   const log = options.log ?? (() => {});
+  // Checked before a connection is even opened, so the destructive path cannot be
+  // reached by a partially-successful run.
+  if (options.fresh) assertSafeToReset(connectionString);
   const client = new Client({ connectionString });
   await client.connect();
   const applied: string[] = [];

@@ -40,15 +40,32 @@ Migrations live in `supabase/migrations`, are applied in **filename order**, and
 behind and the run is repeatable.
 
 ```bash
-# Apply to whatever DATABASE_URL points at
+# Apply to whatever DATABASE_URL points at. Safe against production.
 DATABASE_URL=… npm run db:apply
 
 # Local Postgres: also install the Supabase stand-in, and start from nothing
 DATABASE_URL=… node scripts/db/apply-migrations.ts --shim --fresh
 
-# Apply migrations and assert the security posture
+# Apply migrations and assert the security posture. LOCAL ONLY — see below.
 DATABASE_URL=… npm run db:test
 ```
+
+> ### `npm run db:test` drops the `public` schema
+>
+> It starts every run from nothing, so it is a **local-only** command. Pointing it at a
+> real project would destroy every table there, including tables this project did not
+> create.
+>
+> A guard now refuses `--fresh` against any non-local host and names the host it refused.
+> The distance between "run the tests" and "destroy production" was one stale `export
+> DATABASE_URL` in a shell, which is too short for a flag nobody re-reads.
+>
+> The override, `ALLOW_DESTRUCTIVE_DB_RESET=1`, exists for genuinely throwaway remote
+> databases in CI. If you find yourself reaching for it against something you would miss,
+> that is the guard working.
+>
+> `npm run db:apply` is **not** guarded, because applying migrations to production is the
+> normal intended operation. Only the schema drop is.
 
 `--shim` applies `supabase/local/00_shim.sql`, which recreates the `auth` schema,
 `auth.uid()` and the `anon` / `authenticated` / `service_role` roles that Supabase provides
@@ -141,6 +158,20 @@ select t.tablename
  where t.schemaname = 'public' and t.rowsecurity
    and not exists (select 1 from pg_policies p
                     where p.schemaname = t.schemaname and p.tablename = t.tablename);
+```
+
+To read the RLS posture of every table by hand, use this — joining `pg_class` on
+`relname` alone matches same-named tables in other schemas and can report another
+schema's flags as though they were `public`'s:
+
+```sql
+select c.relname as table_name,
+       c.relrowsecurity as rls_enabled,
+       c.relforcerowsecurity as rls_forced
+  from pg_class c
+  join pg_namespace n on n.oid = c.relnamespace
+ where n.nspname = 'public' and c.relkind = 'r'
+ order by c.relname;
 ```
 
 `npm run db:test` asserts this is empty. If it is failing in production, that test was not

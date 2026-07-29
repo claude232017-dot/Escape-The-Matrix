@@ -42,8 +42,20 @@ comment on schema app is
 -- not a UI suggestion: the client-side limit exists to give a fast error, and this exists
 -- to make the rule true. Mirror note: the client-side caps live with each feature's
 -- validation module and name this constraint.
-create domain app.capped_text_140 as text
-  constraint capped_text_140_length check (value is null or char_length(value) <= 140);
+-- Guarded rather than `drop domain if exists ... cascade`: once columns are typed with
+-- this domain, a cascading drop would silently take the columns with it. `create domain`
+-- has no IF NOT EXISTS, so the existence check is explicit.
+do $$
+begin
+  if not exists (
+    select 1 from pg_type t
+     where t.typname = 'capped_text_140' and t.typnamespace = 'app'::regnamespace
+  ) then
+    create domain app.capped_text_140 as text
+      constraint capped_text_140_length check (value is null or char_length(value) <= 140);
+  end if;
+end
+$$;
 
 comment on domain app.capped_text_140 is
   'Short structured prose: a commitment, a propaganda line, a debrief field. 140 '
@@ -53,8 +65,17 @@ comment on domain app.capped_text_140 is
 -- ISO-4217 alphabetic code. Mirror note: the supported set is CURRENCY_EXPONENTS in
 -- src/lib/money.ts; adding a currency there means adding it here, or inserts are
 -- rejected at runtime.
-create domain app.currency_code as char(3)
-  constraint currency_code_format check (value ~ '^[A-Z]{3}$');
+do $$
+begin
+  if not exists (
+    select 1 from pg_type t
+     where t.typname = 'currency_code' and t.typnamespace = 'app'::regnamespace
+  ) then
+    create domain app.currency_code as char(3)
+      constraint currency_code_format check (value ~ '^[A-Z]{3}$');
+  end if;
+end
+$$;
 
 comment on domain app.currency_code is
   'ISO-4217 alphabetic currency code. Always stored beside an amount in integer minor '
@@ -74,7 +95,10 @@ comment on schema public is
 -- ---------------------------------------------------------------------------
 -- Also the Phase 0 proof that the whole pipeline works end to end: a migration applies,
 -- a table exists, RLS is on, and the guardrail test in tests/db can see all three.
-create table public.app_meta (
+-- Idempotent throughout: this file gets pasted into the Supabase SQL editor by hand for
+-- the first deployment, and a migration that half-applies and then errors on the second
+-- attempt is how someone ends up unpicking state by hand at the worst moment.
+create table if not exists public.app_meta (
   id boolean primary key default true constraint app_meta_single_row check (id),
   schema_version integer not null,
   -- Versioned alongside docs/DOCTRINE.md. The rules will be tuned between campaigns and
@@ -96,6 +120,7 @@ alter table public.app_meta force row level security;
 -- happen in migrations, which run as the owner and bypass RLS. There is deliberately no
 -- INSERT, UPDATE or DELETE policy — under RLS a verb with no policy is denied, so the
 -- absence here is the enforcement.
+drop policy if exists app_meta_select_authenticated on public.app_meta;
 create policy app_meta_select_authenticated
   on public.app_meta
   for select
@@ -105,4 +130,8 @@ create policy app_meta_select_authenticated
 grant select on public.app_meta to authenticated;
 
 insert into public.app_meta (schema_version, doctrine_version)
-values (1, '2026.07-draft');
+values (1, '2026.07-draft')
+on conflict (id) do update
+  set schema_version = excluded.schema_version,
+      doctrine_version = excluded.doctrine_version,
+      updated_at = now();

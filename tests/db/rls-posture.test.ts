@@ -76,6 +76,26 @@ describeDb('database security posture', () => {
     expect(rows[0]?.schema_version).toBe(1);
   });
 
+  it('re-applies cleanly, because a human will paste this into a SQL editor', async () => {
+    // The first deployment is done by hand against Supabase, so "run it twice by
+    // accident" is a realistic event rather than a hypothetical. A migration that
+    // half-applies and then errors leaves someone unpicking state at the worst moment.
+    // `create domain` has no IF NOT EXISTS — that was the real failure this catches.
+    await applyMigrations(CONNECTION as string, { withShim: false, fresh: false });
+    await applyMigrations(CONNECTION as string, { withShim: false, fresh: false });
+
+    const { rows } = await client.query<{ count: string }>(
+      'select count(*)::text as count from public.app_meta',
+    );
+    expect(rows[0]?.count, 'app_meta gained rows on re-apply').toBe('1');
+
+    const domains = await client.query<{ count: string }>(
+      `select count(*)::text as count from pg_type
+        where typnamespace = 'app'::regnamespace and typtype = 'd'`,
+    );
+    expect(domains.rows[0]?.count).toBe('2');
+  });
+
   it('enables row-level security on every table in public', async () => {
     const { rows } = await client.query<{ tablename: string; rowsecurity: boolean }>(
       `select tablename, rowsecurity

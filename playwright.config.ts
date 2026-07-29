@@ -5,7 +5,13 @@ import { defineConfig, devices } from '@playwright/test';
 // succeeds and the job dies at the timeout having run zero tests.
 const HOST = '127.0.0.1';
 const PORT = 4173;
-const BASE_URL = `http://${HOST}:${PORT}`;
+
+// Point the suite at a real deployment instead of a local preview:
+//   PLAYWRIGHT_BASE_URL=https://your-app.vercel.app npx playwright test
+// The local preview server is then not started at all — starting one and testing a
+// different origin would report a green run against code nobody deployed.
+const DEPLOYED_URL = process.env.PLAYWRIGHT_BASE_URL;
+const BASE_URL = DEPLOYED_URL ?? `http://${HOST}:${PORT}`;
 
 export default defineConfig({
   testDir: './tests/browser',
@@ -34,12 +40,16 @@ export default defineConfig({
       },
     },
   ],
-  webServer: {
-    // Serve the built artifact. Rebuilding inside the readiness budget is how this
-    // times out on a cold cache.
-    command: `npm run preview -- --host ${HOST} --port ${PORT} --strictPort`,
-    url: BASE_URL,
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
-  },
+  ...(DEPLOYED_URL
+    ? {}
+    : {
+        webServer: {
+          // Serve the built artifact. Rebuilding inside the readiness budget is how this
+          // times out on a cold cache.
+          command: `npm run preview -- --host ${HOST} --port ${PORT} --strictPort`,
+          url: BASE_URL,
+          reuseExistingServer: !process.env.CI,
+          timeout: 120_000,
+        },
+      }),
 });

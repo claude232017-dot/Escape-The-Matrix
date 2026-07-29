@@ -43,7 +43,23 @@ describeDb('database security posture', () => {
   let client: Client;
 
   beforeAll(async () => {
-    await applyMigrations(CONNECTION as string, { withShim: true, fresh: true });
+    try {
+      await applyMigrations(CONNECTION as string, { withShim: true, fresh: true });
+    } catch (error) {
+      // A bare ECONNREFUSED here reads as a broken test suite rather than a missing
+      // server, and the next person loses ten minutes to it. Name the cause and both
+      // ways out — the suite is meant to be skippable, but only deliberately.
+      const cause = error as NodeJS.ErrnoException;
+      if (cause.code === 'ECONNREFUSED' || cause.code === 'ENOTFOUND') {
+        throw new Error(
+          `DATABASE_URL is set but nothing is listening on it, so the RLS posture was ` +
+            `NOT verified. Start Postgres (see docs/RUNBOOK.md) or unset DATABASE_URL to ` +
+            `skip these tests deliberately. Original error: ${cause.message}`,
+          { cause: error },
+        );
+      }
+      throw error;
+    }
     client = new Client({ connectionString: CONNECTION });
     await client.connect();
   }, 60_000);

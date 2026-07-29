@@ -79,27 +79,41 @@ row is attributable to a specific named man who knows the others.
 
 ---
 
-## 3. The question for the owner
+## 3. Mentor visibility — decided
 
-**How much of a member's protocol detail should the mentor see?**
+**Option B: full detail, disclosed at enrollment.** Owner's decision, 2026-07-29. See
+ADR-009 for the alternatives and their costs.
 
-The three coherent answers:
+The mentor sees every protocol itemised, including the sexual-discipline and substance
+protocols. Peers do not — those default to `aggregate_only` and count only toward the
+day's status.
 
-| Option | What the mentor sees | Cost |
-|---|---|---|
-| **A. Same as peers** | Day status and aggregate compliance. Sexual-discipline and substance protocols never itemised to anyone. | The mentor cannot spot the specific pattern he is best placed to help with. |
-| **B. Full detail, disclosed** | Everything, itemised — and the member is told this **at enrollment**, in plain words, before he files anything. | Some men will under-report the sensitive protocols. That is a real cost to data quality, and it is honest. |
-| **C. Member chooses per protocol** | Whatever each man opts into, defaulting to aggregate. | Uneven data across the circle; the Commander's View has to handle gaps without making the gap itself look like a confession. |
+**The disclosure is what makes this legitimate, not the access level**, so it is a
+build requirement rather than a policy note:
 
-The agent's recommendation is **B, and only B done properly** — because it matches how the
-circle already works (these men talk to this mentor about this material), and because a
-silent version of B is the only genuinely wrong answer. The disclosure is what makes it
-legitimate, not the access level.
+| Requirement | Where |
+|---|---|
+| Enrollment shows, in plain words, exactly what the mentor will see — before the member files anything | Phase 1, blocking step in the enrollment flow |
+| Acceptance is recorded with a timestamp and the doctrine version in force | Phase 1, `enrollments.disclosure_accepted_at` + `disclosure_version` |
+| A member can re-read the disclosure at any time without hunting for it | Phase 1, linked from his profile |
+| Re-consent when the disclosure text materially changes | Phase 2, on doctrine version bump |
+| The mentor's read access is enforced by RLS, not by hiding UI | Phase 2 |
 
-What must not happen is the mentor quietly having full detail while members assume the
-peer view applies to him too.
+The failure mode this is built to prevent: **the mentor quietly having full detail while
+members assume the peer view applies to him too.** That is the one genuinely wrong version
+of this decision, and every requirement above exists to make it impossible to ship by
+accident.
 
-**Owner: answer this before Phase 2 implements the visibility model.**
+### The cost, stated plainly
+
+Some men will under-report the sensitive protocols once they know the mentor sees them
+itemised. That is a real hit to data quality and it was accepted knowingly. Watch for it:
+a member whose sexual-discipline protocol is passed every single day from Day 1 while his
+other protocols show normal variance is more likely under-reporting than perfect.
+
+Do **not** build a detector for that. It would be a machine accusing a man of lying to his
+mentor, which destroys the trust the disclosure just bought. It is a thing for the mentor
+to notice and raise in person.
 
 ---
 

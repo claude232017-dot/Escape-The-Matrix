@@ -145,10 +145,10 @@ survivable. It is encoded exactly as stated:
 - The enrollment's `started_on` is **Day 1**, not Day 0.
 - The day count is **derived** — days since the current enrollment's start — never a
   stored counter.
-- The **SITREP deadline** is local midnight. **[ASSUMED]** — the source does not state a
-  cut-off; this is the obvious reading of a daily report, but if the circle's real
-  practice is "before you sleep, even if that is 01:30", say so, because it changes which
-  date a late-night report is filed against.
+- The **SITREP deadline is local midnight.** Confirmed by the owner, 2026-07-29. A report
+  filed at 01:30 counts for the **new** day, and the day just ended is closed. There is no
+  grace window: a man who files at 00:30 has missed the previous day, and that is the
+  intended reading — the deadline is the point of the mechanism.
 - A day with no SITREP is still a day of the campaign. Silence does not pause the clock.
 
 ---
@@ -252,9 +252,13 @@ circle has a group chat already, and a worse one inside this app would split the
 conversation and turn accountability into performance.
 
 Per-protocol visibility is configurable, and **sensitive protocols default to
-`aggregate_only`**: they count toward the day's status, which the circle sees, but are not
-itemised to peers. See `docs/SECURITY.md` for what this covers and why, and for the
-mentor-access question the owner has to answer at Phase 2.
+`aggregate_only` for peers**: they count toward the day's status, which the circle sees,
+but are not itemised to other members.
+
+**The mentor sees full detail, itemised, and every member is told so at enrollment** —
+before he files anything. Owner's decision, 2026-07-29; see ADR-009 for the alternatives
+and what this one costs. The disclosure is what makes the access legitimate, so it is a
+blocking step in the enrollment flow, not a line in a settings page.
 
 ---
 
@@ -291,14 +295,24 @@ Recorded here because these are decisions, not omissions, and each has an ADR.
 
 ## 10. Corrections needed from the owner
 
-The **[ASSUMED]** lines above, in priority order:
+### Settled — 2026-07-29
 
-1. **The SITREP deadline** (§4). Local midnight, or "before you sleep"? This decides which
-   date a 01:30 report belongs to.
-2. **The week start** (§8). Monday assumed.
-3. **The Fortress Protocol** (§2.4). Is it written down per man, or a shared standard?
-4. **Zero day = three protocols** (§5.2) — confirmed from the source, but confirm it is
-   three *active* protocols, not three of the full list.
-5. **Which protocols are `is_treason_trigger`** beyond the sexual-discipline oath.
-6. **Activation days** for each protocol in §2.1 — the source says protocols are
-   introduced progressively but not on which days.
+| Question | Answer |
+|---|---|
+| The SITREP deadline (§4) | **Local midnight.** No grace window. |
+| Mentor visibility (§7) | **Full detail, disclosed at enrollment.** ADR-009. |
+| The leading business actions (ADR-003) | **All six confirmed as proposed.** Seventh slot left open. |
+
+### Still open, in priority order
+
+1. **The week start** (§8). Monday assumed — implied by "declare Monday, settle Sunday"
+   but never stated. Blocks Phase 5.
+2. **Activation days** for each protocol in §2.1. The source says protocols are introduced
+   progressively but not on which days. Blocks the Phase 2 seed migration — a placeholder
+   of "all active from Day 1" would make the progressive introduction untestable.
+3. **Which protocols are `is_treason_trigger`** beyond the sexual-discipline oath.
+4. **Zero day = three protocols** (§5.2). Taken from the source; confirm it means three
+   *active* protocols, not three of the full list. The difference matters most in week
+   one, when few protocols are live and three failures may be most of them.
+5. **The Fortress Protocol** (§2.4). Written down per man, or a shared standard? Decides
+   whether it is a `profiles` column or campaign-level text.

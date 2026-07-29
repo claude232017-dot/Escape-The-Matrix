@@ -1,6 +1,6 @@
 # ADR-003 — The leading business actions
 
-**Status:** Proposed — **awaiting the owner's decision**
+**Status:** Accepted — all six confirmed by the owner, 2026-07-29
 **Date:** 2026-07-29
 **Phase:** 0 (governs Phase 4)
 

@@ -97,13 +97,12 @@ Vercel, preset Vite, build `npm run build`, output `dist`. Set `VITE_SUPABASE_UR
 | `docs/RUNBOOK.md` | Deploy, migrate, roll back, and the failures that present as something else |
 | `docs/DECISIONS/` | One ADR per non-obvious call, including what was rejected and what it cost |
 
-## Two things the owner needs to decide
+## Doctrine decisions on record
 
-1. **`docs/SECURITY.md` §3** — how much of a member's protocol detail the mentor sees. This
-   is special-category data under GDPR and the answer changes what Phase 2 builds.
-2. **`docs/DECISIONS/ADR-003`** — the six leading business actions. The protocols come from
-   the doctrine; this list does not, and it defines what the circle optimises for
-   commercially.
+Settled 2026-07-29: the SITREP deadline is **local midnight** with no grace window; the
+mentor sees **full protocol detail, disclosed at enrollment** (ADR-009); the **six leading
+business actions** in ADR-003 are confirmed.
 
-`docs/DOCTRINE.md` §10 lists the assumptions the code already depends on, in priority
-order. They should be corrected before Phase 2.
+`docs/DOCTRINE.md` §10 lists what is still open — the week start, per-protocol activation
+days, and which protocols beyond the sexual-discipline oath are treason triggers. Activation
+days block the Phase 2 seed migration.

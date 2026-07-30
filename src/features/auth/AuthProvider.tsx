@@ -330,7 +330,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // An instant, not a calendar date. The ban on toISOString() exists to stop a
           // *date* being derived in UTC when it must be resolved in the member's timezone;
           // "when did he accept" is the same moment for everyone.
-          // eslint-disable-next-line no-restricted-syntax -- instant, not a calendar date
           .update({ disclosure_accepted_at: new Date().toISOString(), disclosure_version: version })
           .eq('id', session.user.id);
         if (updateError) throw updateError;

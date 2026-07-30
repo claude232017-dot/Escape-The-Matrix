@@ -24,15 +24,21 @@ export default tseslint.config(
       'no-restricted-syntax': [
         'error',
         {
-          // toISOString() yields the UTC date. In a product where midnight is a deadline
-          // and a day is a unit of moral accounting, a member at UTC-5 would see the day
-          // roll over at 19:00. Use getLocalDateString(tz) from @/lib/date.
+          // The bug: slicing a calendar date out of an ISO string yields the UTC date, so a
+          // member at UTC-5 sees his day roll over at 19:00 — in a product where midnight is a
+          // deadline and a day is a unit of moral accounting.
           //
-          // Mirror note: the same rule is stated in the header of src/lib/date.ts, and
-          // the behaviour it protects is asserted in src/lib/date.test.ts.
-          selector: "MemberExpression[property.name='toISOString']",
+          // Targeted at the slicing rather than at toISOString() itself, which is the correct
+          // wire format for a timestamptz — a queue timestamp, an expiry, a submitted_at. Banning
+          // the whole method produced false positives on every one of those, and a rule that
+          // cries wolf teaches people to reach for eslint-disable instead of reading it.
+          //
+          // Mirror note: the rule is stated in the header of src/lib/date.ts and the behaviour it
+          // protects is asserted in src/lib/date.test.ts.
+          selector:
+            "CallExpression[callee.object.callee.property.name='toISOString'][callee.property.name=/^(slice|substring|substr|split)$/]",
           message:
-            'Do not derive a calendar date from toISOString() — it is UTC. Use getLocalDateString(tz) from @/lib/date.',
+            'Do not slice a calendar date out of toISOString() — it is UTC. Use getLocalDateString(tz) from @/lib/date.',
         },
       ],
     },

@@ -318,6 +318,7 @@ Recorded here because these are decisions, not omissions, and each has an ADR.
 | Mentor visibility (§7) | **Full detail, disclosed at enrollment.** ADR-009. |
 | The leading business actions (ADR-003) | **All six confirmed as proposed.** Seventh slot left open. |
 | Protocol activation days (§2.0) | **Five waves: days 1, 4, 8, 15, 22.** |
+| Zero-day threshold (§5.2) | **Three active protocols. Unchanged.** Confirmed 2026-07-30 with the day-one consequence understood: three protocols are live on day 1, so failing all of them is an act of treason rather than a tactical failure. Failing everything on the first day is a statement, and the doctrine answers it as one. |
 
 ### Still open, in priority order
 
@@ -325,10 +326,5 @@ Recorded here because these are decisions, not omissions, and each has an ADR.
    but never stated. Blocks Phase 5.
 2. **Which protocols are `is_treason_trigger`** beyond the sexual-discipline oath. Seeded as
    the oath alone.
-3. **Zero day = three protocols** (§5.2). Taken from the source; confirm it means three
-   *active* protocols, not three of the full list. This is now sharper than it was, because
-   the activation schedule puts exactly three protocols live on day 1 — so under the current
-   reading, a man who fails everything on his first day commits treason rather than a
-   tactical failure. That may be intended. It should be intended on purpose.
-4. **The Fortress Protocol** (§2.4). Written per man — implemented that way, as
+3. **The Fortress Protocol** (§2.4). Written per man — implemented that way, as
    `profiles.fortress_protocol`. Confirm there is no shared standard it should default to.

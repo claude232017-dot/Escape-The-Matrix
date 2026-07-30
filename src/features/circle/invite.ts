@@ -36,7 +36,6 @@ export function invitationExpiry(from: Date = new Date()): string {
   // exists to stop a *date* being derived in UTC when it should be resolved in the member's
   // timezone; an expiry is the same moment for everyone, and ISO-8601 is the right wire
   // format for it.
-  // eslint-disable-next-line no-restricted-syntax -- instant, not a calendar date
   return expires.toISOString();
 }
 

@@ -102,11 +102,21 @@ export const CONTRAST_PAIRS: readonly ContrastPair[] = [
   { fg: 'accent', bg: 'surface-overlay', kind: 'text', usage: 'Dialog primary text' },
   { fg: 'accent-strong', bg: 'surface-base', kind: 'text', usage: 'Hover / focus state of accent text' },
   { fg: 'accent-ink', bg: 'accent', kind: 'text', usage: 'Label on the primary (filled) button' },
+  // The SITREP's answer control fills the chosen option. The label then sits on the status
+  // colour rather than on a surface, which is a different measurement from the status text
+  // pairs below — and the one that decides whether he can read what he just chose.
+  { fg: 'accent-ink', bg: 'status-pass', kind: 'text', usage: 'Label on the chosen "Done / Held" option' },
+  { fg: 'accent-ink', bg: 'status-med', kind: 'text', usage: 'Label on the chosen MED option' },
+  { fg: 'accent-ink', bg: 'status-fail', kind: 'text', usage: 'Label on the chosen "Missed / Broke it" option' },
 
   { fg: 'status-pass', bg: 'surface-base', kind: 'text', usage: 'Protocol passed' },
   { fg: 'status-pass', bg: 'surface-raised', kind: 'text', usage: 'Protocol passed, in a card' },
   { fg: 'status-med', bg: 'surface-base', kind: 'text', usage: 'Passed at MED — a win, marked amber' },
   { fg: 'status-med', bg: 'surface-raised', kind: 'text', usage: 'Passed at MED, in a card' },
+  // The MED text sits in an inset well inside the protocol row. Declared `text` rather than
+  // non-text although it is also the well's left rule: the heading is real text, and the
+  // stricter of two applicable thresholds is the one to measure against.
+  { fg: 'status-med', bg: 'surface-sunken', kind: 'text', usage: 'MED heading and rule, in the SITREP inset' },
   { fg: 'status-fail', bg: 'surface-base', kind: 'text', usage: 'Protocol failed (tactical)' },
   { fg: 'status-fail', bg: 'surface-raised', kind: 'text', usage: 'Protocol failed, in a card' },
   { fg: 'status-treason', bg: 'surface-base', kind: 'text', usage: 'Act of treason / reset notice' },
@@ -114,11 +124,18 @@ export const CONTRAST_PAIRS: readonly ContrastPair[] = [
   { fg: 'status-pending', bg: 'surface-base', kind: 'text', usage: 'Not yet reported' },
   { fg: 'status-pending', bg: 'surface-raised', kind: 'text', usage: 'Not yet reported, in a card' },
 
+  // The SITREP's live verdict sits in an inset well: what today amounts to, stated before he
+  // files it. All three outcomes share that surface, so all three are measured on it.
+  { fg: 'status-pass', bg: 'surface-sunken', kind: 'text', usage: 'Complete day, in the verdict well' },
+  { fg: 'status-fail', bg: 'surface-sunken', kind: 'text', usage: 'Tactical failure, in the verdict well' },
+  { fg: 'status-treason', bg: 'surface-sunken', kind: 'text', usage: 'Reset, in the verdict well' },
+
   { fg: 'border-strong', bg: 'surface-base', kind: 'non-text', usage: 'Input and control outlines' },
   { fg: 'border-strong', bg: 'surface-raised', kind: 'non-text', usage: 'Control outlines in cards' },
   { fg: 'border-strong', bg: 'surface-overlay', kind: 'non-text', usage: 'Control outlines in dialogs' },
   { fg: 'border-subtle', bg: 'surface-void', kind: 'decorative', usage: 'Section rules — never a control boundary' },
   { fg: 'border-subtle', bg: 'surface-raised', kind: 'decorative', usage: 'Card hairlines — never a control boundary' },
+  { fg: 'border-subtle', bg: 'surface-base', kind: 'decorative', usage: 'Protocol row hairlines — never a control boundary' },
 
   { fg: 'focus', bg: 'surface-void', kind: 'non-text', usage: 'Focus ring on the app background' },
   { fg: 'focus', bg: 'surface-base', kind: 'non-text', usage: 'Focus ring on the main surface' },

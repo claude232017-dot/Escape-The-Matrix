@@ -22,6 +22,17 @@ other. Current pairs:
 | 140-character cap on structured prose | feature validation modules | `app.capped_text_140` |
 | Supported currencies | `CURRENCY_EXPONENTS`, `src/lib/money.ts` | `app.currency_code` + per-table CHECK |
 | One SITREP per member per local date | `src/lib/date.ts` | unique index on `(enrollment_id, local_date)` |
+| A MED option may only accompany a MED pass | `setStatus()`, `src/features/forge/sitrep-draft.ts` | `protocol_results_med_option_only_for_med_pass` |
+| What today's date is, for a member | `getLocalDateString()`, `src/lib/date.ts` | `app.today_for()`, and inlined once in `public.start_campaign_enrollment()` |
+| What a day amounts to (complete / repeat / reset) | `evaluateDay()`, `src/features/forge/doctrine.ts` | not enforced in SQL — see below |
+
+The last row is the one honest exception, and it is worth naming rather than leaving to be
+discovered. The database does **not** recompute whether a day was a reset; it accepts the
+`final_status` the client sends. What it does enforce is everything a wrong answer could be used
+to *gain*: which dates may be filed against, that a day cannot be filed before it is lived, that
+an enrollment cannot be back-dated, and that a reset cannot be quietly taken back. A man who
+lies to this app about his own day has defeated a thing that only works if he does not, and no
+constraint can fix that. A man who forges a *date* is attacking the dataset, and that is closed.
 
 **Never** put a service-role key in a `VITE_`-prefixed variable. That prefix means "bundle
 this into the file served to the browser", and a service-role key bypasses every policy on
@@ -134,12 +145,58 @@ Filled in per phase. Every cell gets a test. Phase 9 requires a passing test per
 | `invitations` | `anon` | ✗ | ✗ | ✗ | ✗ |
 | `invitations` | member | ✗ | ✗ | ✗ | ✗ |
 | `invitations` | mentor | ✓ own circle | ✓ own circle | ✓ own circle | ✓ own circle |
+| `campaigns` | `anon` | ✗ | ✗ | ✗ | ✗ |
+| `campaigns` | member | ✓ own circle | ✗ | ✗ | ✗ |
+| `campaigns` | mentor | ✓ own circle | ✓ own circle | ✓ own circle | ✗ |
+| `protocols` | `anon` | ✗ | ✗ | ✗ | ✗ |
+| `protocols` | member | ✓ own circle | ✗ | ✗ | ✗ |
+| `protocols` | mentor | ✓ own circle | ✓ own circle | ✓ own circle | ✓ own circle |
+| `protocol_med_options` | `anon` | ✗ | ✗ | ✗ | ✗ |
+| `protocol_med_options` | member | ✓ own circle | ✗ | ✗ | ✗ |
+| `protocol_med_options` | mentor | ✓ own circle | ✓ own circle | ✓ own circle | ✓ own circle |
+| `enrollments` | `anon` | ✗ | ✗ | ✗ | ✗ |
+| `enrollments` | member | ✓ circle | ✓ own | ✓ own | ✗ **no grant** |
+| `enrollments` | mentor | ✓ circle | ✓ own | ✓ own | ✗ **no grant** |
+| `sitreps` | `anon` | ✗ | ✗ | ✗ | ✗ |
+| `sitreps` | member | ✓ circle | ✓ own | ✓ own | ✗ **no grant** |
+| `sitreps` | mentor | ✓ circle | ✓ own | ✓ own | ✗ **no grant** |
+| `protocol_results` | `anon` | ✗ | ✗ | ✗ | ✗ |
+| `protocol_results` | member | ✓ own **+ peers' `itemised` only** | ✓ own | ✓ own | ✓ own |
+| `protocol_results` | mentor | ✓ circle, **all protocols** | ✓ own | ✓ own | ✓ own |
+| `reset_events` | `anon` | ✗ | ✗ | ✗ | ✗ |
+| `reset_events` | member | ✓ own only | ✓ own | ✗ | ✗ **no grant** |
+| `reset_events` | mentor | ✓ own + circle | ✓ own | ✗ | ✗ **no grant** |
 
 Legend: ✓ own — own rows only. ✓ circle — rows in the member's circle. ✓ all —
 unrestricted. ✗ — no policy or no grant, therefore denied.
 
-Every cell above has a passing test in `tests/db/identity-rls.test.ts`, run as a real
-`authenticated` session with real JWT claims.
+Every cell above has a passing test: identity in `tests/db/identity-rls.test.ts`, the Forge in
+`tests/db/forge-rls.test.ts`, all run as real `authenticated` sessions with real JWT claims.
+
+The row that matters most is `protocol_results` for a **member**. A peer may read a result only
+when the protocol is marked `itemised`; for `sexual-discipline` and `alcohol-and-drugs` he gets
+**zero rows**. That is the §2 handling table enforced rather than described, and it is asserted
+directly rather than inferred from the policy text.
+
+`enrollments`, `sitreps` and `reset_events` have **no DELETE grant at all**. History is never
+destroyed (ADR-002), and the absence of the privilege is what makes that structural rather than a
+convention someone can forget.
+
+### RPCs
+
+Two functions in `public` are reachable over the API. Both are **SECURITY INVOKER**, so every
+policy above still applies inside them — see ADR-012.
+
+| Function | `anon` | `authenticated` |
+|---|---|---|
+| `public.file_sitrep(...)` | ✗ revoked | ✓ own enrollment only |
+| `public.start_campaign_enrollment(uuid)` | ✗ revoked | ✓ own profile only |
+
+Functions in `public` are EXECUTE-to-PUBLIC by default, and the default privileges revoked in
+`0001_baseline.sql` do **not** remove that grant — so a new function is exposed to `anon` unless a
+migration explicitly revokes it. `tests/db/rls-posture.test.ts` enumerates every function in
+`public` reachable by either role and compares it against an allowlist, so the next RPC cannot be
+added without someone deciding it is API surface.
 
 ### Two enforcement details worth knowing
 

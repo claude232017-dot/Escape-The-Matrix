@@ -46,7 +46,10 @@ $$;
 -- `profiles.timezone`, which is the same value getLocalDateString(tz) uses on the client.
 --
 -- Mirror note: src/lib/date.ts getLocalDateString() is the client-side counterpart. They must
--- agree, and they do because both resolve the same IANA zone from the same column.
+-- agree, and they do because both resolve the same IANA zone from the same column. The body is
+-- also inlined once more, in public.start_campaign_enrollment() in 0004_file_sitrep.sql — that
+-- function is SECURITY INVOKER and so cannot look up a name in the app schema. Change one, change
+-- all three.
 create or replace function app.today_for(profile uuid)
 returns date
 language sql

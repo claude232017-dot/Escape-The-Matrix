@@ -150,6 +150,19 @@ survivable. It is encoded exactly as stated:
 - The MED text is shown **inline, on the same screen as the pass/fail control** — at the
   point where a man is deciding whether to write the day off. That is the moment the
   doctrine has to be in front of him, not buried in a rules page.
+- The MED is a **peer option in the same control**, not a fallback behind a disclosure. A
+  protocol with one MED offers three positions — done / MED / missed. Physical Forging, which
+  has two, offers four: done, Option A, Option B, missed. Presenting the MED as something you
+  reach only after admitting you failed would invert the mechanic; it is meant to be the obvious
+  move on a bad day, not a confession.
+- Where a MED names one of the member's own artefacts, **the artefact is rendered beside it**.
+  The Morning Protocol MED says "read the Top G Code aloud", so his Top G Code is on the screen;
+  Deep Work names the Fortress Protocol, so his is. Printing an instruction to consult something
+  and then not showing it is friction at exactly the wrong moment — the low-energy morning the
+  MED exists to rescue.
+- Filing a full day, every protocol live, is measured at **under sixty seconds one-handed at
+  360px** — one tap per protocol and one to file, in `tests/browser/sitrep.spec.ts`. That budget
+  is what decides the shape of the control; it is a gate, not an aspiration.
 
 ---
 
@@ -201,6 +214,21 @@ history to destroy.
 A `reset_events` row records the date, the kind (`treason` or `zero_day`), the reason, and
 which protocols were failed — so patterns in resets become visible in the same way
 patterns in attacks do.
+
+All four writes happen in **one database call**, `public.file_sitrep` — see ADR-012. Four writes
+from a browser means four places for a lost connection to leave the man with a reset recorded and
+no campaign to file against tomorrow.
+
+Two rules follow from the successor enrollment starting the day *after* the breach:
+
+- **A reset cannot be amended into something else.** The successor exists and may already have
+  days filed against it; rewriting the day that closed this one would orphan them.
+- **A reset can only be filed for the latest reported day of an enrollment.** Otherwise the
+  successor would start on a date that already has a report against the enrollment it replaced,
+  and one calendar date would belong to two enrollments.
+
+Both are enforced in SQL, because both are ways the day count could be recovered after it was
+lost.
 
 > **Open question for the owner — raised at Phase 2, not decided here.**
 > A self-reported system where failure costs twenty-seven days of visible progress creates

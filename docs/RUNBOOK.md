@@ -33,6 +33,26 @@ PLAYWRIGHT_CHROMIUM_PATH=/path/to/chromium npm run test:browser
 CI leaves that variable unset and uses `playwright install`, so the pinned browser is what
 actually gets tested.
 
+### The browser suite needs the harness build
+
+`npm run test:browser` previews whatever is in `dist`. The SITREP specs drive a harness route
+that renders the screen with fixture data and no session — the only way to *measure* the
+sixty-second filing gate rather than assert it. Build it first:
+
+```bash
+npm run build:harness   # tsc -b && vite build --mode harness
+npm run test:browser
+```
+
+`--mode harness` is what loads `.env.harness`, which sets `VITE_TEST_HARNESS=1`. A plain
+`npm run build` does not load that file, so the harness is eliminated from the bundle — the
+route, the component and its fixtures. `tests/unit/harness-excluded.test.ts` performs a real
+default-mode build and greps the output to prove it, and also fails if anyone adds the variable
+to `.env` or `.env.production`.
+
+If the SITREP specs fail with "sitrep not visible", the first thing to check is whether `dist`
+is a production build.
+
 ## Database
 
 Migrations live in `supabase/migrations`, are applied in **filename order**, and are

@@ -1,0 +1,438 @@
+import { test, expect, type ConsoleMessage, type Locator, type Page } from '@playwright/test';
+
+/**
+ * The SITREP screen, in a real browser.
+ *
+ * The gate for this feature is a **measurement**: filing must take under sixty seconds, one-handed,
+ * on a 360px screen. That is not something a unit test can establish, so it is done here — at
+ * 360px, on day 22 when all eleven protocols are live, counting the taps and the wall time.
+ *
+ * These run against the harness build (`npm run build:harness`), which renders the presentational
+ * component with fixture data and no network. tests/unit/harness-excluded.test.ts proves that
+ * harness cannot exist in a production build; the pure rules behind the screen are covered by
+ * src/features/forge/sitrep-draft.test.ts and the server side by tests/db/file-sitrep.test.ts.
+ */
+
+const HARNESS = '/harness/sitrep';
+const PHONE = { width: 360, height: 740 };
+const WIDTHS = [320, 360, 390, 430, 768, 1024, 1280, 1440, 1920];
+
+/** Every protocol live. The worst case for the budget, so the one to measure. */
+const DAY_ALL_LIVE = 22;
+const PROTOCOLS_ON_DAY_22 = 11;
+
+function collectConsoleErrors(page: Page): string[] {
+  const errors: string[] = [];
+  page.on('console', (message: ConsoleMessage) => {
+    if (message.type() === 'error') errors.push(message.text());
+  });
+  page.on('pageerror', (error) => errors.push(`pageerror: ${error.message}`));
+  page.on('response', (response) => {
+    if (response.status() >= 400) errors.push(`http ${response.status()}: ${response.url()}`);
+  });
+  return errors;
+}
+
+async function openHarness(page: Page, day = DAY_ALL_LIVE): Promise<void> {
+  await page.goto(`${HARNESS}?day=${day}`);
+  await expect(page.getByTestId('sitrep')).toBeVisible();
+}
+
+function row(page: Page, slug: string): Locator {
+  return page.locator(`[data-protocol="${slug}"]`);
+}
+
+/** The radio for one answer, found by its accessible name rather than its position. */
+function answer(page: Page, slug: string, name: string | RegExp): Locator {
+  return row(page, slug).getByRole('radio', { name });
+}
+
+async function filedPayload(page: Page): Promise<{
+  finalStatus: string;
+  resetKind: string | null;
+  protocolsFailed: string[];
+  results: { protocolId: string; status: string; medOptionId: string | null }[];
+} | null> {
+  const raw = await page.getByTestId('filed-payload').textContent();
+  return raw ? JSON.parse(raw) : null;
+}
+
+test.describe('the SITREP screen', () => {
+  test('files a complete day in under sixty seconds at 360px', async ({ page }) => {
+    // The gate. One tap per protocol plus one to file — no confirmation dialog, no scroll-back, no
+    // separate step to choose between Physical Forging's two MEDs, because those alternatives are
+    // positions in the same control.
+    await page.setViewportSize(PHONE);
+    await openHarness(page);
+
+    const rows = page.locator('[data-protocol]');
+    await expect(rows).toHaveCount(PROTOCOLS_ON_DAY_22);
+
+    const started = Date.now();
+    let taps = 0;
+
+    const slugs = await rows.evaluateAll((elements) =>
+      elements.map((element) => element.getAttribute('data-protocol') ?? ''),
+    );
+    for (const slug of slugs) {
+      // The first option in each row: "Done" for a duty, "Held" for a prohibition. A man having a
+      // good day taps straight down the left-hand column.
+      await row(page, slug).getByRole('radio').first().click();
+      taps += 1;
+    }
+
+    await page.getByTestId('file-sitrep').click();
+    taps += 1;
+
+    await expect(page.getByTestId('queue-status')).toHaveText(/on the server/);
+    const seconds = (Date.now() - started) / 1000;
+
+    expect(taps, 'one tap per protocol plus one to file').toBe(PROTOCOLS_ON_DAY_22 + 1);
+    expect(seconds, `filing took ${seconds.toFixed(1)}s`).toBeLessThan(60);
+
+    const payload = await filedPayload(page);
+    expect(payload?.finalStatus).toBe('complete');
+    expect(payload?.results).toHaveLength(PROTOCOLS_ON_DAY_22);
+  });
+
+  test('offers only the protocols that are live on the day', async ({ page }) => {
+    // Activation schedule, DOCTRINE §2.0. A protocol below its activation day cannot be failed and
+    // must not be shown — offering one would judge a man against a rule that is not live.
+    await openHarness(page, 1);
+    await expect(page.locator('[data-protocol]')).toHaveCount(4);
+    await expect(row(page, 'physical-forging')).toHaveCount(0);
+    await expect(row(page, 'mindless-scrolling')).toHaveCount(0);
+
+    await openHarness(page, 4);
+    await expect(page.locator('[data-protocol]')).toHaveCount(6);
+    await expect(row(page, 'physical-forging')).toHaveCount(1);
+    await expect(row(page, 'junk-food')).toHaveCount(0);
+  });
+
+  test('shows the MED at the control, with his own Top G Code in it', async ({ page }) => {
+    // The moment he reads the MED is the moment he is deciding whether to write the day off, so it
+    // is next to the pass/fail control rather than behind a disclosure. And the Morning Protocol
+    // MED says "read the Top G Code aloud" — printing that without the Code is friction at exactly
+    // the wrong moment.
+    await page.setViewportSize(PHONE);
+    await openHarness(page);
+
+    const morning = row(page, 'morning-protocol');
+    await expect(morning.getByText('Minimum effective dose', { exact: false })).toBeVisible();
+    await expect(morning.getByText('read the Top G Code aloud', { exact: false })).toBeVisible();
+    await expect(morning.getByText('Your Top G Code')).toBeVisible();
+    await expect(
+      morning.getByText('I do not negotiate with the version of me that wants to quit.'),
+    ).toBeVisible();
+
+    // Deep Work's MED names the Fortress Protocol, so that is what its row shows.
+    const deepWork = row(page, 'deep-work');
+    await expect(deepWork.getByText('Your Fortress Protocol')).toBeVisible();
+    await expect(deepWork.getByText('Your Top G Code')).toHaveCount(0);
+  });
+
+  test('presents Physical Forging as a genuine either/or and records which he took', async ({
+    page,
+  }) => {
+    await page.setViewportSize(PHONE);
+    await openHarness(page);
+
+    const forging = row(page, 'physical-forging');
+    // Four peer options, not three with a hidden sub-choice: done in full, either MED, or missed.
+    await expect(forging.getByRole('radio')).toHaveCount(4);
+    await expect(forging.getByText('100 push-ups and 200 bodyweight squats', { exact: false })).toBeVisible();
+    await expect(forging.getByText('A 20-minute non-stop run or brisk walk', { exact: false })).toBeVisible();
+
+    await answer(page, 'physical-forging', /Option B/).click();
+
+    // Everything else held, so the day can be filed and the payload inspected.
+    for (const slug of await page
+      .locator('[data-protocol]')
+      .evaluateAll((elements) => elements.map((element) => element.getAttribute('data-protocol') ?? ''))) {
+      if (slug === 'physical-forging') continue;
+      await row(page, slug).getByRole('radio').first().click();
+    }
+    await page.getByTestId('file-sitrep').click();
+
+    const payload = await filedPayload(page);
+    expect(payload?.results).toContainEqual({
+      protocolId: 'id-physical-forging',
+      status: 'med_pass',
+      medOptionId: 'med-forging-b',
+    });
+    // A MED pass is a pass. The day is complete.
+    expect(payload?.finalStatus).toBe('complete');
+  });
+
+  test('clears the MED option when he upgrades to a full pass', async ({ page }) => {
+    // Mirror: the SQL constraint protocol_results_med_option_only_for_med_pass rejects a
+    // med_option_id on a pass. Left set, every affected write would bounce — and it would claim he
+    // did the minimum on a day he did the whole thing.
+    await openHarness(page);
+    await answer(page, 'physical-forging', /Option A/).click();
+    await answer(page, 'physical-forging', /done in full/).click();
+
+    for (const slug of await page
+      .locator('[data-protocol]')
+      .evaluateAll((elements) => elements.map((element) => element.getAttribute('data-protocol') ?? ''))) {
+      await row(page, slug).getByRole('radio').first().click();
+    }
+    await page.getByTestId('file-sitrep').click();
+
+    const payload = await filedPayload(page);
+    expect(payload?.results).toContainEqual({
+      protocolId: 'id-physical-forging',
+      status: 'pass',
+      medOptionId: null,
+    });
+  });
+
+  test('counts a MED pass as a complete day and says so', async ({ page }) => {
+    await openHarness(page);
+    for (const slug of await page
+      .locator('[data-protocol]')
+      .evaluateAll((elements) => elements.map((element) => element.getAttribute('data-protocol') ?? ''))) {
+      await row(page, slug).getByRole('radio').first().click();
+    }
+    await answer(page, 'morning-protocol', /minimum effective dose/).click();
+
+    const verdict = page.getByTestId('verdict');
+    await expect(verdict).toHaveAttribute('data-outcome', 'complete');
+    await expect(verdict).toContainText('This is a complete day.');
+    // "The only true failure is zero." A MED pass keeps the streak, and calling it anything less is
+    // what makes a man stop using it.
+    await expect(verdict).toContainText('That counts.');
+  });
+
+  test('calls one miss a tactical failure and names it', async ({ page }) => {
+    await openHarness(page);
+    for (const slug of await page
+      .locator('[data-protocol]')
+      .evaluateAll((elements) => elements.map((element) => element.getAttribute('data-protocol') ?? ''))) {
+      await row(page, slug).getByRole('radio').first().click();
+    }
+    await answer(page, 'junk-food', /broke it/).click();
+
+    const verdict = page.getByTestId('verdict');
+    await expect(verdict).toHaveAttribute('data-outcome', 'repeat');
+    await expect(verdict).toContainText('Tactical failure');
+    await expect(verdict).toContainText('The day is lost and repeats');
+    // Named, not counted: "two protocols failed" is not something he can act on.
+    await expect(verdict).toContainText('junk-food');
+  });
+
+  test('reports a reset as a fact with its consequence, not as a verdict', async ({ page }) => {
+    // Framed as a judgement, a reset becomes something to avoid filing — and an unfiled reset is a
+    // hole in the only dataset this product exists to build.
+    await openHarness(page);
+    for (const slug of await page
+      .locator('[data-protocol]')
+      .evaluateAll((elements) => elements.map((element) => element.getAttribute('data-protocol') ?? ''))) {
+      await row(page, slug).getByRole('radio').first().click();
+    }
+    await answer(page, 'sexual-discipline', /broke it/).click();
+
+    const verdict = page.getByTestId('verdict');
+    await expect(verdict).toHaveAttribute('data-outcome', 'reset');
+    await expect(verdict).toContainText('An act of treason under the oath.');
+    await expect(verdict).toContainText('returns to Day 1 tomorrow');
+    // The load-bearing sentence: nothing is destroyed. ADR-002.
+    await expect(verdict).toContainText('stays in the record');
+
+    await page.getByTestId('file-sitrep').click();
+    const payload = await filedPayload(page);
+    expect(payload?.finalStatus).toBe('reset');
+    expect(payload?.resetKind).toBe('treason');
+    expect(payload?.protocolsFailed).toEqual(['sexual-discipline']);
+  });
+
+  test('treats three misses as a zero day', async ({ page }) => {
+    await openHarness(page);
+    for (const slug of await page
+      .locator('[data-protocol]')
+      .evaluateAll((elements) => elements.map((element) => element.getAttribute('data-protocol') ?? ''))) {
+      await row(page, slug).getByRole('radio').first().click();
+    }
+    await answer(page, 'junk-food', /broke it/).click();
+    await answer(page, 'video-games', /broke it/).click();
+
+    await expect(page.getByTestId('verdict')).toHaveAttribute('data-outcome', 'repeat');
+
+    await answer(page, 'binge-watching', /broke it/).click();
+    const verdict = page.getByTestId('verdict');
+    await expect(verdict).toHaveAttribute('data-outcome', 'reset');
+    await expect(verdict).toContainText('A zero day.');
+
+    await page.getByTestId('file-sitrep').click();
+    expect((await filedPayload(page))?.resetKind).toBe('zero_day');
+  });
+
+  test('discloses which protocols the circle never sees itemised', async ({ page }) => {
+    // §3.5. Sensitive protocols default to aggregate-only, and saying so where he answers is the
+    // difference between a policy and a disclosure.
+    await openHarness(page);
+    await expect(
+      row(page, 'sexual-discipline').getByText('never itemised', { exact: false }),
+    ).toBeVisible();
+    await expect(
+      row(page, 'alcohol-and-drugs').getByText('never itemised', { exact: false }),
+    ).toBeVisible();
+    await expect(row(page, 'video-games').getByText('never itemised', { exact: false })).toHaveCount(0);
+  });
+
+  test('will not file an incomplete day', async ({ page }) => {
+    // Silence is not a pass. Filing ten of eleven would record the eleventh as held.
+    await openHarness(page);
+    await expect(page.getByTestId('file-sitrep')).toBeDisabled();
+    await expect(page.getByTestId('verdict')).toHaveAttribute('data-outcome', 'incomplete');
+    await expect(page.getByTestId('verdict')).toContainText('11 protocols still need an answer.');
+
+    const slugs = await page
+      .locator('[data-protocol]')
+      .evaluateAll((elements) => elements.map((element) => element.getAttribute('data-protocol') ?? ''));
+    for (const slug of slugs.slice(0, -1)) {
+      await row(page, slug).getByRole('radio').first().click();
+    }
+    await expect(page.getByTestId('file-sitrep')).toBeDisabled();
+    await expect(page.getByTestId('verdict')).toContainText('1 protocol still needs an answer.');
+
+    await row(page, slugs.at(-1) as string)
+      .getByRole('radio')
+      .first()
+      .click();
+    await expect(page.getByTestId('file-sitrep')).toBeEnabled();
+  });
+
+  test('never claims a report was saved when it was not', async ({ page }) => {
+    // §3.10. "Saved" and a green tick are both lies for something still on the device, and a man
+    // who believes his SITREP is filed does not file it again.
+    await openHarness(page);
+    const status = page.getByTestId('queue-status');
+    await expect(status).toHaveText(/Nothing waiting to send\./);
+    await expect(status).not.toHaveText(/[Ss]aved/);
+    await expect(page.getByText('✓')).toHaveCount(0);
+  });
+
+  test('is operable with the keyboard alone', async ({ page }) => {
+    await openHarness(page, 1);
+    const done = answer(page, 'morning-protocol', /done in full/);
+    const med = answer(page, 'morning-protocol', /minimum effective dose/);
+    const missed = answer(page, 'morning-protocol', /missed/);
+
+    // Entered with a click and then driven by keys, which is both how a phone user actually
+    // corrects an answer and — usefully — a hard barrier: waiting for `toBeChecked` guarantees
+    // React has committed the roving-focus state before the first arrow. Without a barrier the
+    // first arrow is swallowed, because Playwright presses keys inside a window a human cannot
+    // hit. That is a test artefact, not a defect, and it is worth saying so rather than leaving
+    // the next person to rediscover it.
+    await done.click();
+    await expect(done).toBeChecked();
+
+    // Arrow moves focus; Space commits. Pinned because the alternative — selecting on focus —
+    // would record every option he arrowed *past*, and the last one would silently win. On a
+    // screen where an answer is a claim about how he lived the day, moving through the options
+    // must not be the same act as choosing one.
+    await page.keyboard.press('ArrowRight');
+    await expect(med).toBeFocused();
+    await expect(med).not.toBeChecked();
+    await expect(done).toBeChecked();
+
+    await page.keyboard.press('Space');
+    await expect(med).toBeChecked();
+    await expect(done).not.toBeChecked();
+
+    await page.keyboard.press('ArrowRight');
+    await expect(missed).toBeFocused();
+    await page.keyboard.press('Space');
+    await expect(missed).toBeChecked();
+    await expect(med).not.toBeChecked();
+
+    // Each row is a single tab stop rather than one per option, so eleven protocols are eleven
+    // stops rather than thirty-eight.
+    await page.keyboard.press('Tab');
+    await expect(row(page, 'daily-sitrep').getByRole('radio').first()).toBeFocused();
+  });
+
+  test('gives every control an accessible name', async ({ page }) => {
+    await openHarness(page);
+    const unnamed = await page
+      .locator('a, button, input, select, textarea, [role="radio"]')
+      .evaluateAll((elements) =>
+        elements
+          .filter((element) => {
+            const label =
+              element.getAttribute('aria-label') ??
+              element.getAttribute('title') ??
+              element.textContent ??
+              '';
+            return label.trim() === '';
+          })
+          .map((element) => element.outerHTML.slice(0, 120)),
+      );
+    expect(unnamed, `controls with no accessible name: ${unnamed.join(' | ')}`).toEqual([]);
+  });
+
+  test('keeps every tap target at 44px or more on a phone', async ({ page }) => {
+    await page.setViewportSize(PHONE);
+    await openHarness(page);
+
+    const tooSmall = await page
+      .locator('[role="radio"], button')
+      .evaluateAll((elements) =>
+        elements
+          .map((element) => {
+            const box = element.getBoundingClientRect();
+            return { text: element.textContent?.trim() ?? '', w: box.width, h: box.height };
+          })
+          .filter((box) => box.w > 0 && (box.w < 44 || box.h < 44)),
+      );
+    expect(
+      tooSmall,
+      `tap targets under 44px: ${tooSmall.map((b) => `${b.text} ${b.w}x${b.h}`).join(', ')}`,
+    ).toEqual([]);
+  });
+
+  test('does not overflow horizontally at any width', async ({ page }) => {
+    await openHarness(page);
+    for (const width of WIDTHS) {
+      await page.setViewportSize({ width, height: 900 });
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      );
+      expect(overflow, `horizontal overflow of ${overflow}px at ${width}px`).toBeLessThanOrEqual(1);
+    }
+  });
+
+  test('renders with no console errors', async ({ page }) => {
+    const errors = collectConsoleErrors(page);
+    await page.setViewportSize(PHONE);
+    await openHarness(page);
+    await row(page, 'morning-protocol').getByRole('radio').first().click();
+    expect(errors, `console errors: ${errors.join(' | ')}`).toEqual([]);
+  });
+
+  test('respects prefers-reduced-motion', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await openHarness(page);
+    await expect(page.getByTestId('sitrep')).toBeVisible();
+    const animated = await page.evaluate(() =>
+      [...document.querySelectorAll('*')].filter((element) => {
+        const style = getComputedStyle(element);
+        const duration = Number.parseFloat(style.animationDuration) || 0;
+        return style.animationName !== 'none' && duration > 0;
+      }).length,
+    );
+    expect(animated).toBe(0);
+  });
+
+  test('does not expose the harness anywhere but its own path', async ({ page }) => {
+    // Even in the harness build. The route is one exact path, so a mistyped or guessed URL lands on
+    // the application, which requires a session.
+    await page.goto('/');
+    await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
+    await expect(page.getByTestId('sitrep')).toHaveCount(0);
+
+    await page.goto('/harness');
+    await expect(page.getByTestId('sitrep')).toHaveCount(0);
+  });
+});

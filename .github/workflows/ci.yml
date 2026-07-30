@@ -36,8 +36,18 @@ jobs:
       - name: Unit tests
         run: npm test
 
+      # The production build, exactly as it would be deployed. Run first and separately from
+      # the harness build below so that a failure here is unambiguous.
       - name: Build
         run: npm run build
+
+      # The browser suite drives the SITREP screen through a harness that renders it with
+      # fixture data and no session, which is the only way to *measure* the sixty-second
+      # filing gate rather than assert it. `--mode harness` loads .env.harness; a normal
+      # build does not, and tests/unit/harness-excluded.test.ts (run in the step above)
+      # proves the harness cannot reach a production bundle.
+      - name: Build with the test harness
+        run: npm run build:harness
 
       # The browser job consumes this rather than rebuilding. Rebuilding inside the
       # readiness budget of the preview server is how that job times out on a cold cache.

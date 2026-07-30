@@ -3,6 +3,7 @@ import { PHASE, PHASE_LABEL } from '@/app/build-info';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { InvitePanel } from '@/features/circle/components/InvitePanel';
 import { ProfileScreen } from '@/features/profile/components/ProfileScreen';
+import { SitrepScreen } from '@/features/forge/components/SitrepScreen';
 import { Button } from '@/ui/Button';
 
 /**
@@ -88,6 +89,18 @@ export function SignedInShell() {
             />
           ) : null}
 
+          {/* The Forge. Above the build status, because it is what a man opens this for — and
+              it is the only thing on this screen with a deadline. */}
+          <SitrepScreen
+            profileId={profile.id}
+            timezone={profile.timezone}
+            artefacts={{
+              topGCode: profile.topGCode,
+              commandPostNote: profile.commandPostNote,
+              fortressProtocol: profile.fortressProtocol,
+            }}
+          />
+
           <section
             aria-labelledby="status-heading"
             className="rounded-[var(--radius-lg)] border border-border-subtle bg-surface-raised p-5 sm:p-6"
@@ -105,8 +118,9 @@ export function SignedInShell() {
               <span className="text-text-secondary">— {PHASE_LABEL}</span>
             </p>
             <p className="mt-4 max-w-prose text-sm leading-relaxed text-text-secondary">
-              Identity and invitations are live. The Forge — protocols, the MED and the daily
-              SITREP — is not built yet, so there is nothing to report against.
+              The Forge is live: protocols, the MED and the daily SITREP. The Ledger — ventures,
+              business actions and revenue — is not built yet, so nothing correlates against
+              income yet.
             </p>
             <dl className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Fact term="Your timezone" detail={profile.timezone} />

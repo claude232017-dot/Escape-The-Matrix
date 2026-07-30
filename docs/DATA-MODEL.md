@@ -150,9 +150,9 @@ would enforce nothing — which is why these are two triggers and not one.
 Both are `SECURITY DEFINER` with `search_path` pinned to `''`. A `SECURITY DEFINER` function
 with a mutable `search_path` is a privilege-escalation primitive, not a helper.
 
-## Planned
+## Shipped in Phase 2
 
-### The Forge — Phase 2
+### The Forge — `0003_forge.sql` and `0004_file_sitrep.sql`
 
 - **`campaigns`** — `circle_id`, `name`, `starts_on`, `length_days`, `ruleset_version`.
 - **`enrollments`** — `profile_id`, `campaign_id`, `started_on`, `status`,
@@ -172,9 +172,30 @@ with a mutable `search_path` is a privilege-escalation primitive, not a helper.
   bug server-side.
 - **`protocol_results`** — `sitrep_id`, `protocol_id`, `status`
   (`pass` | `med_pass` | `fail`), `med_option_id` nullable.
-- **`debriefs`** — `sitrep_id` 1:1, plus the fields in DOCTRINE §6.
 - **`reset_events`** — `enrollment_id`, `occurred_on`, `kind`, `reason`,
-  `protocols_failed`.
+  `protocols_failed`. Unique on `(enrollment_id, occurred_on)`, which is what makes a retried
+  reset converge rather than duplicate.
+
+`enrollments`, `sitreps` and `reset_events` have **no DELETE grant**. History is never destroyed
+(ADR-002) and the missing privilege is what makes that structural. `enrollments` also carries a
+partial unique index on `previous_enrollment_id`, so the reset chain cannot fork and "which day
+am I on" cannot have two answers.
+
+### Filing a day — the two RPCs
+
+- **`public.file_sitrep(enrollment, local_date, final_status, results, reset_kind, failed)`** —
+  writes the SITREP, replaces its results, and for a reset also records the event, closes the
+  enrollment and opens the successor. One transaction, idempotent, **SECURITY INVOKER** so every
+  policy still applies. See ADR-012.
+- **`public.start_campaign_enrollment(campaign)`** — returns the caller's active enrollment,
+  creating it if absent, starting on the later of the campaign start and his own today. Joining
+  on day 9 of a campaign means his own Day 1, not day 9.
+
+## Planned
+
+### The debrief — Phase 3
+
+- **`debriefs`** — `sitrep_id` 1:1, plus the fields in DOCTRINE §6.
 
 ### The Ledger — Phase 4
 

@@ -105,8 +105,37 @@ describeDb('database security posture', () => {
     expect(rows).toHaveLength(1);
     // Bumped by the latest migration. Asserting the exact number rather than ">= 1" so
     // that a migration which forgets to bump it is caught here.
-    expect(rows[0]?.schema_version).toBe(3);
+    expect(rows[0]?.schema_version).toBe(4);
     expect(rows[0]?.doctrine_version).toBe('2026.07-draft');
+  });
+
+  it('exposes only the RPCs that were deliberately granted', async () => {
+    // A function in `public` is API surface: PostgREST publishes it at /rpc/<name>, callable by
+    // anyone holding the anon key. Functions are also EXECUTE-to-PUBLIC by default, and the
+    // default privileges revoked in 0001 do not remove that — so a new function is exposed
+    // unless a migration explicitly revokes it. This list is the review gate.
+    const ALLOWED_RPCS = ['file_sitrep', 'start_campaign_enrollment'];
+
+    const { rows } = await client.query<{ proname: string; role: string }>(
+      `select p.proname, r.rolname as role
+         from pg_proc p
+         cross join (values ('anon'), ('authenticated')) as roles(rolname)
+         join pg_roles r on r.rolname = roles.rolname
+        where p.pronamespace = 'public'::regnamespace
+          and has_function_privilege(r.rolname, p.oid, 'EXECUTE')
+        order by p.proname, r.rolname`,
+    );
+
+    const reachableByAnon = rows.filter((row) => row.role === 'anon').map((row) => row.proname);
+    expect(
+      reachableByAnon,
+      `functions in public reachable with the public anon key: ${reachableByAnon.join(', ')}`,
+    ).toEqual([]);
+
+    const reachableByMembers = [
+      ...new Set(rows.filter((row) => row.role === 'authenticated').map((row) => row.proname)),
+    ].sort();
+    expect(reachableByMembers).toEqual([...ALLOWED_RPCS].sort());
   });
 
   it('re-applies cleanly, because a human will paste this into a SQL editor', async () => {

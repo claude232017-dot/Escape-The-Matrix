@@ -7,16 +7,22 @@ import {
 } from '@/features/forge/debrief-draft';
 
 /**
- * What his own record says about the enemy.
+ * What his own record says about the Bottom G.
  *
  * This is the reason the debrief gets filled in a second time. Data entry into a void stops after
  * a week; a screen that answers back does not. DOCTRINE §6.3 promises sentences a chat channel
  * can never produce, and this is the first of them delivered.
  *
+ * The saboteur is named, in copy, exactly as DOCTRINE §1 names him: **Bottom G, and nothing
+ * else**. This panel used to say "your enemy", which is the softening §1 rules out. The word does
+ * the work — a named opponent with a timetable is something you can plan against, and "your
+ * enemy" is a mood. (§1 also drops the source material's rainbow flag tag, which aims at a group
+ * of people rather than at the behaviour; that is not carried into any of this.)
+ *
  * The discipline that matters here is **refusing to claim a pattern that is not there**. Below
  * `PATTERN_MINIMUM` attacks, or when they are scattered across the day, it says so plainly
- * instead of naming a window. A man who acts on "your enemy attacks at 15:00", finds nothing, and
- * learns the app makes things up will never trust the real finding when it arrives.
+ * instead of naming a window. A man who acts on "the Bottom G attacks at 15:00", finds nothing,
+ * and learns the app makes things up will never trust the real finding when it arrives.
  *
  * This is his own data only. A peer cannot read `bottom_g_tactics` at all — see
  * 0005_debrief.sql and tests/db/debrief-rls.test.ts.
@@ -39,13 +45,13 @@ export function AttackPatternPanel({ attacks }: { attacks: readonly AttackRecord
         id="pattern-heading"
         className="text-xs font-semibold tracking-[0.18em] text-text-muted uppercase"
       >
-        Your enemy&apos;s pattern
+        The Bottom G&apos;s pattern
       </h2>
 
       <p data-testid="pattern-headline" className="mt-3 max-w-prose text-sm leading-relaxed text-text-secondary">
         {pattern.peakWindow ? (
           <>
-            He attacks between{' '}
+            The Bottom G attacks between{' '}
             <span data-numeral className="text-status-fail">
               {formatHour(pattern.peakWindow.from)}
             </span>{' '}
@@ -61,14 +67,14 @@ export function AttackPatternPanel({ attacks }: { attacks: readonly AttackRecord
           <>
             <span data-numeral>{pattern.total}</span>{' '}
             {pattern.total === 1 ? 'attack' : 'attacks'} logged. At{' '}
-            <span data-numeral>{PATTERN_MINIMUM}</span> this will start telling you when he
-            prefers to move.
+            <span data-numeral>{PATTERN_MINIMUM}</span> this will start telling you when the
+            Bottom G prefers to move.
           </>
         ) : (
           <>
             No clear window yet — your{' '}
             <span data-numeral>{pattern.total}</span> attacks are spread across the day. That is a
-            finding too: he is not waiting for a particular hour.
+            finding too: the Bottom G is not waiting for a particular hour.
           </>
         )}
       </p>
@@ -77,8 +83,8 @@ export function AttackPatternPanel({ attacks }: { attacks: readonly AttackRecord
 
       {worst && pattern.total >= PATTERN_MINIMUM ? (
         <p data-testid="pattern-worst" className="mt-5 max-w-prose text-sm leading-relaxed text-text-secondary">
-          <span className="text-status-fail">{TRIGGER_LABELS[worst.kind]}</span> is his most
-          effective weapon against you — you lose to it{' '}
+          <span className="text-status-fail">{TRIGGER_LABELS[worst.kind]}</span> is the Bottom
+          G&apos;s most effective weapon against you — you lose to it{' '}
           <span data-numeral>{worst.losses}</span> times in{' '}
           <span data-numeral>{worst.attacks}</span>.
         </p>

@@ -262,6 +262,57 @@ describeDb('the Ledger', () => {
       );
       expect(rows).toEqual([{ name: 'Consultancy', kind: 'B2B services' }]);
     });
+
+    it('accepts a write through a schema-qualified domain cast, as a browser sends it', async () => {
+      // The bug this exists to stop coming back. Naming a venture failed in the browser with
+      // `permission denied for schema app`, while every test here was green.
+      //
+      // PostgREST writes a schema-qualified cast for a domain column —
+      // `insert into public.ventures (kind) values ($1::public.capped_text_140)` — and resolving
+      // that type name at *parse* time needs USAGE on the schema. `authenticated` deliberately has
+      // none on `app` (ADR-011), so while the domains lived there the statement was rejected
+      // before RLS was ever consulted. Nothing caught it because every test wrote a bare SQL
+      // literal, which needs no cast, and every earlier capped-column write went through a
+      // SECURITY DEFINER RPC, where the cast is parsed as the owner.
+      //
+      // So this test writes the cast explicitly. Mirror: supabase/migrations/0007_domains_to_public.sql.
+      const written = await asMember(memberA, async (query) => {
+        const venture = (await query(
+          `insert into public.ventures (owner_id, name, kind, started_on)
+           values ($1, 'Cast probe', $2::public.capped_text_140, $3::date)
+           returning id, kind`,
+          [memberA.id, 'B2B services', todayA],
+        )) as { id: string; kind: string }[];
+
+        // money_entries carries both domains, and was the next tap that would have failed.
+        const money = (await query(
+          `insert into public.money_entries
+             (id, venture_id, occurred_on, direction, category, amount_minor, currency, note)
+           values (extensions.gen_random_uuid(), $1, $2::date, 'in', 'sale', 125000,
+                   $3::public.currency_code, $4::public.capped_text_140)
+           returning currency, note`,
+          [venture[0]?.id, todayA, 'GBP', 'first sale'],
+        )) as { currency: string; note: string }[];
+
+        return { venture: venture[0], money: money[0] };
+      });
+
+      expect(written.venture?.kind).toBe('B2B services');
+      expect(written.money).toEqual({ currency: 'GBP', note: 'first sale' });
+    });
+
+    it('has no domain left in a schema members cannot reach', async () => {
+      // The general form of the above: any domain in `app` is a column type no browser can write.
+      // Mirror: tests/db/rls-posture.test.ts asserts where the domains actually are.
+      const stranded = await client.query<{ typname: string }>(
+        `select t.typname from pg_type t
+          where t.typtype = 'd' and t.typnamespace = 'app'::regnamespace`,
+      );
+      expect(
+        stranded.rows.map((r) => r.typname),
+        'domains in `app` are unwritable from PostgREST — move them to public',
+      ).toEqual([]);
+    });
   });
 
   describe('money is bigint minor units', () => {

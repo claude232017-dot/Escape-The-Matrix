@@ -77,7 +77,7 @@ export function DebriefForm({
           Debrief
         </h2>
         <p className="mt-2 max-w-prose text-sm leading-relaxed text-text-secondary">
-          Two questions. What worked, and what the enemy tried. Answered in fields rather than
+          Two questions. What worked, and what the Bottom G tried. Answered in fields rather than
           paragraphs so that in thirty days it can tell you something a chat channel cannot.
         </p>
       </header>
@@ -131,7 +131,7 @@ export function DebriefForm({
       <div className="mt-8 border-t border-border-subtle pt-6">
         <h3 className="text-sm font-semibold text-status-fail">Bottom G Tactic</h3>
         <p className="mt-1 max-w-prose text-xs leading-relaxed text-text-muted">
-          Not what you did wrong — what the enemy did. Time, trigger, and the exact lie. This is
+          Not what you did wrong — what the Bottom G did. Time, trigger, and the exact lie. This is
           the half only you and the mentor can read.
         </p>
 

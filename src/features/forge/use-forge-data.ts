@@ -179,30 +179,32 @@ async function loadForge(profileId: string, today: string): Promise<Loaded | nul
   // does not make him a different man, and the enemy's timetable does not restart with it.
   let filedDebrief: Loaded['filedDebrief'] = null;
   if (sitrepId) {
-    const { data: debriefRows, error: debriefError } = await supabase
-      .from('debriefs')
-      .select(
-        'system_used, victory, insight_protocol_id, attacked, outcome, bottom_g_tactics:bottom_g_tactics!inner(occurred_at_hour, trigger_kind, propaganda, protocol_id)',
-      )
-      .eq('sitrep_id', sitrepId)
-      .limit(1);
-    // A quiet day has no tactic row, so the inner join returns nothing. Fall back to the
-    // debrief alone rather than treating "no attack" as "no debrief".
-    const withTactic = debriefError ? null : (debriefRows?.[0] ?? null);
-    const row =
-      withTactic ??
-      (
-        await supabase
-          .from('debriefs')
-          .select('system_used, victory, insight_protocol_id, attacked, outcome')
-          .eq('sitrep_id', sitrepId)
-          .limit(1)
-      ).data?.[0] ??
-      null;
+    // Two queries rather than an embed. `bottom_g_tactics` has a foreign key to `sitreps`, not to
+    // `debriefs`, so PostgREST has no relationship to resolve between them and answers 400 —
+    // which is what was filling the console on every load. There is a fallback below it, so the
+    // screen worked; it just logged a failed request each time and paid for a wasted round trip.
+    //
+    // Both tables are keyed by `sitrep_id`, so asking each of them directly is the same question
+    // with an answer PostgREST can actually give. A quiet day has no tactic row, which is a
+    // missing attack rather than a missing debrief.
+    const [debriefResult, tacticResult] = await Promise.all([
+      supabase
+        .from('debriefs')
+        .select('system_used, victory, insight_protocol_id, attacked, outcome')
+        .eq('sitrep_id', sitrepId)
+        .limit(1),
+      supabase
+        .from('bottom_g_tactics')
+        .select('occurred_at_hour, trigger_kind, propaganda, protocol_id')
+        .eq('sitrep_id', sitrepId)
+        .limit(1),
+    ]);
+
+    const row = debriefResult.data?.[0] ?? null;
 
     if (row) {
       const record = row as Record<string, unknown>;
-      const tactic = (record['bottom_g_tactics'] as Record<string, unknown>[] | undefined)?.[0];
+      const tactic = tacticResult.data?.[0] as Record<string, unknown> | undefined;
       filedDebrief = {
         draft: {
           systemUsed: (record['system_used'] as string | null) ?? '',

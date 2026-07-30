@@ -105,7 +105,7 @@ describeDb('database security posture', () => {
     expect(rows).toHaveLength(1);
     // Bumped by the latest migration. Asserting the exact number rather than ">= 1" so
     // that a migration which forgets to bump it is caught here.
-    expect(rows[0]?.schema_version).toBe(6);
+    expect(rows[0]?.schema_version).toBe(7);
     expect(rows[0]?.doctrine_version).toBe('2026.07-draft');
   });
 
@@ -156,11 +156,20 @@ describeDb('database security posture', () => {
     );
     expect(rows[0]?.count, 'app_meta gained rows on re-apply').toBe('1');
 
-    const domains = await client.query<{ count: string }>(
-      `select count(*)::text as count from pg_type
-        where typnamespace = 'app'::regnamespace and typtype = 'd'`,
+    const domains = await client.query<{ nspname: string; typname: string }>(
+      `select n.nspname, t.typname
+         from pg_type t join pg_namespace n on n.oid = t.typnamespace
+        where t.typtype = 'd' and n.nspname in ('app', 'public')
+        order by n.nspname, t.typname`,
     );
-    expect(domains.rows[0]?.count).toBe('2');
+    // Both domains, once each, and in `public` — not `app`. See 0007: PostgREST writes a
+    // schema-qualified cast for a domain column (`$1::public.capped_text_140`), and resolving
+    // that name at parse time needs USAGE on the schema, which `authenticated` does not have on
+    // `app` (ADR-011). A domain left in `app` is a column nobody can write from a browser.
+    expect(domains.rows.map((r) => `${r.nspname}.${r.typname}`)).toEqual([
+      'public.capped_text_140',
+      'public.currency_code',
+    ]);
   });
 
   it('enables row-level security on every table in public', async () => {
@@ -332,17 +341,17 @@ describeDb('database security posture', () => {
   it('caps structured prose in the database, not only in the browser', async () => {
     // The client-side cap gives a fast error; this is what makes the rule true.
     await expect(
-      client.query(`select ('${'x'.repeat(141)}')::app.capped_text_140`),
+      client.query(`select ('${'x'.repeat(141)}')::public.capped_text_140`),
     ).rejects.toThrow(/capped_text_140/);
-    await expect(client.query(`select ('${'x'.repeat(140)}')::app.capped_text_140`)).resolves
+    await expect(client.query(`select ('${'x'.repeat(140)}')::public.capped_text_140`)).resolves
       .toBeDefined();
   });
 
   it('rejects a malformed currency code at the storage layer', async () => {
-    await expect(client.query(`select ('usd')::app.currency_code`)).rejects.toThrow(
+    await expect(client.query(`select ('usd')::public.currency_code`)).rejects.toThrow(
       /currency_code_format/,
     );
-    await expect(client.query(`select ('USD')::app.currency_code`)).resolves.toBeDefined();
+    await expect(client.query(`select ('USD')::public.currency_code`)).resolves.toBeDefined();
   });
 
   it('keeps app_meta to a single row by constraint', async () => {

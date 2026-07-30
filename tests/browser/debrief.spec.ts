@@ -7,7 +7,7 @@ import { smallTapTargets, unnamedControls } from './a11y.ts';
  * Two claims are worth the most here, and neither is testable without a rendered screen.
  *
  * **The app does not claim a pattern it does not have.** Below the minimum, or with attacks spread
- * across the day, it says so rather than naming a window. A man who acts on "your enemy attacks at
+ * across the day, it says so rather than naming a window. A man who acts on "the Bottom G attacks at
  * 15:00", finds nothing, and learns the app invents things will not believe the real finding when
  * it eventually arrives.
  *
@@ -156,11 +156,11 @@ test.describe('the debrief', () => {
     });
   });
 
-  test('names the enemy rather than blaming the man', async ({ page }) => {
+  test('names the Bottom G rather than blaming the man', async ({ page }) => {
     // DOCTRINE §6.2. The labels are the instruction, so they are asserted like any other rule.
     await open(page);
     await expect(debrief(page)).toContainText('Bottom G Tactic');
-    await expect(debrief(page)).toContainText('Not what you did wrong — what the enemy did');
+    await expect(debrief(page)).toContainText('Not what you did wrong — what the Bottom G did');
 
     await debrief(page).getByRole('radio', { name: 'The Bottom G attacked' }).click();
     await expect(debrief(page)).toContainText('Being attacked is not a failure. Losing one is information.');
@@ -210,18 +210,18 @@ test.describe('the attack pattern', () => {
     await expect(panel).toBeVisible();
     await expect(page.getByTestId('pattern-headline')).toContainText('3 attacks logged');
     await expect(page.getByTestId('pattern-headline')).toContainText('At 5 this will start telling you');
-    await expect(page.getByTestId('pattern-headline')).not.toContainText('He attacks between');
+    await expect(page.getByTestId('pattern-headline')).not.toContainText('The Bottom G attacks between');
   });
 
   test('names the window once the evidence is there', async ({ page }) => {
     await open(page, '&attacks=6');
-    await expect(page.getByTestId('pattern-headline')).toContainText('He attacks between');
+    await expect(page.getByTestId('pattern-headline')).toContainText('The Bottom G attacks between');
     await expect(page.getByTestId('pattern-headline')).toContainText('14:00');
     await expect(page.getByTestId('pattern-headline')).toContainText('16:00');
   });
 
-  test('names his most effective enemy with the rate', async ({ page }) => {
-    // "Low energy is his most successful weapon against you — you lose to it 2 times in 3."
+  test('names the Bottom G’s most effective weapon with the rate', async ({ page }) => {
+    // "Low energy is the Bottom G's most successful weapon against you — you lose to it 2 times in 3."
     // DOCTRINE §6.3, delivered.
     await open(page, '&attacks=6');
     const worst = page.getByTestId('pattern-worst');

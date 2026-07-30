@@ -440,7 +440,7 @@ function Capped({
         placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}
         // Not maxLength: a hard stop mid-word looks like the app broke. The count warns, the
-        // blocker explains, and app.capped_text_140 is what actually enforces it.
+        // blocker explains, and public.capped_text_140 is what actually enforces it.
         className="mt-2 block min-h-11 w-full rounded-[var(--radius-md)] border border-border-strong bg-surface-base px-3 text-sm text-text-primary placeholder:text-text-muted"
       />
     </div>

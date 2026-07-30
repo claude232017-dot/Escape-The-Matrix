@@ -50,7 +50,7 @@ export const OUTCOME_LABELS: Record<AttackOutcome, string> = {
   lost: 'It won',
 };
 
-/** Mirror: `app.capped_text_140`. The client cap exists to give a fast error, not to enforce. */
+/** Mirror: `public.capped_text_140`. The client cap gives a fast error; it does not enforce. */
 export const FIELD_CAP = 140;
 
 export interface DebriefDraft {

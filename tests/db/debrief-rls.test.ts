@@ -297,7 +297,7 @@ describeDb('the debrief', () => {
     });
 
     it('caps the propaganda at 140 characters', async () => {
-      // Mirror: app.capped_text_140. It is meant to be the sentence the enemy used, not an
+      // Mirror: public.capped_text_140. It is meant to be the sentence the Bottom G used, not an
       // account of the day.
       await client.query(
         `insert into public.debriefs (sitrep_id, attacked, outcome) values ($1, true, 'lost')`,

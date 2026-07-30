@@ -161,7 +161,7 @@ describe('blockers', () => {
   });
 
   it('rejects an over-long field', () => {
-    // Mirror: app.capped_text_140. Caught here so he gets a fast error rather than a round trip.
+    // Mirror: public.capped_text_140. Caught here so he gets a fast error rather than a round trip.
     const long = 'x'.repeat(141);
     expect(blockers(draft({ attacked: false, systemUsed: long, victory: 'ok' }))).toContain(
       'The system is over 140 characters.',

@@ -92,3 +92,21 @@ export function sqlstateOf(cause: unknown): string | null {
 export function classifyFailure(cause: unknown): FailureClass {
   return classifySqlstate(sqlstateOf(cause));
 }
+
+/**
+ * A failure that never reached the server, given the SQLSTATE that describes it.
+ *
+ * `08006` is `connection_failure`, class 08 — which @/lib/sqlstate already classifies as
+ * transient. Assigning the right code at the boundary is not the same as classifying by message
+ * text: §3.10 forbids reading prose to decide whether to retry, and this decides from
+ * `navigator.onLine`, which is a fact about the transport rather than a string a server chose.
+ */
+export class OfflineError extends Error {
+  readonly code = '08006';
+
+  constructor(cause?: unknown) {
+    super('The request did not reach the server: this device is offline.');
+    this.name = 'OfflineError';
+    if (cause !== undefined) this.cause = cause;
+  }
+}

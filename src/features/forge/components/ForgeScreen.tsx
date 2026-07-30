@@ -16,7 +16,7 @@ import {
   type SitrepPayload,
 } from '@/features/forge/sitrep-draft';
 import { refusalMessage, sendSitrep } from '@/features/forge/sitrep-write';
-import { describeQueue, useOutbox } from '@/features/forge/use-outbox';
+import { describeQueue, useOutbox } from '@/lib/use-outbox';
 import { SitrepForm, type FileState } from '@/features/forge/components/SitrepForm';
 import { DebriefForm } from '@/features/forge/components/DebriefForm';
 import {
@@ -30,6 +30,7 @@ import {
 } from '@/features/forge/debrief-draft';
 import { debriefRefusalMessage, sendDebrief } from '@/features/forge/debrief-write';
 import { AttackPatternPanel } from '@/features/forge/components/AttackPatternPanel';
+import { InsightList } from '@/features/forge/components/InsightList';
 import type { ForgeData, Loaded } from '@/features/forge/use-forge-data';
 import { Button } from '@/ui/Button';
 
@@ -330,6 +331,9 @@ export function ForgeScreen({ view, data, profileId, timezone, artefacts, onStat
   if (view === 'intel') {
     return (
       <div className="flex flex-col gap-6">
+        {/* Wins first. An Intel tab that opens with what beat you is a screen about losing, and
+            DOCTRINE §1 only works if the victories are as visible as the defeats. */}
+        <InsightList insights={loaded.insights} />
         <AttackPatternPanel attacks={loaded.attacks} />
         {loaded.attacks.length === 0 ? (
           <Panel>

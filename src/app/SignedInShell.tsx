@@ -6,6 +6,8 @@ import { InvitePanel } from '@/features/circle/components/InvitePanel';
 import { ProfileScreen } from '@/features/profile/components/ProfileScreen';
 import { ForgeScreen, type ForgeView } from '@/features/forge/components/ForgeScreen';
 import { useForgeData } from '@/features/forge/use-forge-data';
+import { LedgerScreen } from '@/features/ledger/components/LedgerScreen';
+import { useLedgerData } from '@/features/ledger/use-ledger-data';
 import { Button } from '@/ui/Button';
 import { TabPanel, Tabs } from '@/ui/Tabs';
 
@@ -31,6 +33,7 @@ export function SignedInShell() {
   // that loaded its own data re-ran the whole query chain on every switch between Today and
   // Intel — nine round trips per tap. The data belongs to the session, not to a panel.
   const data = useForgeData(profile?.id ?? '', profile?.timezone ?? 'UTC');
+  const ledger = useLedgerData(profile?.id ?? '', profile?.timezone ?? 'UTC');
 
   if (!profile) return null; // Unreachable: AuthGate only renders this in the 'app' view.
 
@@ -64,6 +67,7 @@ export function SignedInShell() {
                 // app. It disappears the moment the day is filed rather than turning into a tick.
                 badge: forge?.outstanding ? String(forge.outstanding) : undefined,
               },
+              { value: 'ledger', label: 'Ledger' },
               { value: 'intel', label: 'Intel' },
               { value: 'circle', label: 'Circle' },
             ]}
@@ -98,6 +102,10 @@ export function SignedInShell() {
                 }}
                 onState={setForge}
               />
+            </TabPanel>
+
+            <TabPanel value="ledger">
+              <LedgerScreen data={ledger} profileId={profile.id} />
             </TabPanel>
 
             <TabPanel value="intel">

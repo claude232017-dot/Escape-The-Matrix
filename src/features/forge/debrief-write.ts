@@ -1,5 +1,6 @@
 import { getSupabase } from '@/lib/supabase';
-import { OfflineError } from '@/features/forge/sitrep-write';
+import { OfflineError } from '@/lib/sqlstate';
+
 import type { DebriefPayload } from '@/features/forge/debrief-draft';
 
 /**

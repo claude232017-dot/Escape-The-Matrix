@@ -1,4 +1,5 @@
 import { getSupabase } from '@/lib/supabase';
+import { OfflineError } from '@/lib/sqlstate';
 import type { SitrepPayload } from '@/features/forge/sitrep-draft';
 
 /**
@@ -8,24 +9,6 @@ import type { SitrepPayload } from '@/features/forge/sitrep-draft';
  * the header of supabase/migrations/0004_file_sitrep.sql. It is idempotent, which is what makes
  * it safe for the outbox to retry.
  */
-
-/**
- * A failure that never reached the server, given the SQLSTATE that describes it.
- *
- * `08006` is `connection_failure`, class 08 — which @/lib/sqlstate already classifies as
- * transient. Assigning the right code at the boundary is not the same as classifying by message
- * text: §3.10 forbids reading prose to decide whether to retry, and this decides from
- * `navigator.onLine`, which is a fact about the transport rather than a string a server chose.
- */
-export class OfflineError extends Error {
-  readonly code = '08006';
-
-  constructor(cause?: unknown) {
-    super('The request did not reach the server: this device is offline.');
-    this.name = 'OfflineError';
-    if (cause !== undefined) this.cause = cause;
-  }
-}
 
 export interface SitrepWriteResult {
   sitrepId: string;

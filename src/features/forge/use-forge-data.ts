@@ -4,6 +4,7 @@ import { getSupabase } from '@/lib/supabase';
 import type { ProtocolStatus } from '@/features/forge/doctrine';
 import type { ProtocolWithMed, SitrepDraft } from '@/features/forge/sitrep-draft';
 import type { AttackRecord, DebriefDraft, TriggerKind } from '@/features/forge/debrief-draft';
+import type { Insight } from '@/features/forge/components/InsightList';
 
 /**
  * Everything the Forge reads, loaded once.
@@ -47,6 +48,8 @@ export interface Loaded {
   attacks: AttackRecord[];
   /** This enrollment's filed days, newest first, for the streak. */
   outcomes: { localDate: string; finalStatus: 'complete' | 'repeat' | 'reset' }[];
+  /** Every Top G Insight he has recorded, newest first. */
+  insights: Insight[];
 }
 
 interface MedOptionRow {
@@ -136,6 +139,7 @@ async function loadForge(profileId: string, today: string): Promise<Loaded | nul
       filedDebrief: null,
       attacks: [],
       outcomes: [],
+      insights: [],
     };
   }
 
@@ -217,7 +221,7 @@ async function loadForge(profileId: string, today: string): Promise<Loaded | nul
 
   // Three independent reads, issued together. Sequentially they were three round trips for data
   // that shares no dependency — and on a phone on mobile data a round trip is not free.
-  const [attackResult, outcomeResult, historyResult] = await Promise.all([
+  const [attackResult, outcomeResult, historyResult, insightResult] = await Promise.all([
     supabase
       .from('bottom_g_tactics')
       .select('occurred_at_hour, trigger_kind, sitreps!inner(id, enrollments!inner(profile_id))')
@@ -228,6 +232,13 @@ async function loadForge(profileId: string, today: string): Promise<Loaded | nul
       .select('local_date, final_status')
       .eq('enrollment_id', enrollment.id)
       .order('local_date', { ascending: false }),
+    supabase
+      .from('debriefs')
+      .select(
+        'sitrep_id, system_used, victory, insight_protocol_id, sitreps!inner(local_date, enrollments!inner(profile_id))',
+      )
+      .eq('sitreps.enrollments.profile_id', profileId)
+      .not('victory', 'is', null),
   ]);
 
   // The outcome lives on `debriefs`, so it is joined back through the sitrep rather than
@@ -258,7 +269,44 @@ async function loadForge(profileId: string, today: string): Promise<Loaded | nul
     }),
   );
 
-  return { campaign, enrollment, protocols, filed, sitrepId, filedDebrief, attacks, outcomes };
+  const protocolLabels = new Map(protocols.map((protocol) => [protocol.id, protocol.label]));
+  const insights: Insight[] = ((insightResult.data ?? []) as unknown as {
+    sitrep_id: string;
+    system_used: string | null;
+    victory: string | null;
+    insight_protocol_id: string | null;
+    sitreps: { local_date: string } | null;
+  }[])
+    .flatMap((row) =>
+      // Both halves or neither — the SQL constraint guarantees it, and a row missing one would be
+      // half a thought rather than an insight.
+      row.system_used && row.victory && row.sitreps
+        ? [
+            {
+              sitrepId: row.sitrep_id,
+              localDate: row.sitreps.local_date,
+              systemUsed: row.system_used,
+              victory: row.victory,
+              protocolLabel: row.insight_protocol_id
+                ? (protocolLabels.get(row.insight_protocol_id) ?? null)
+                : null,
+            },
+          ]
+        : [],
+    )
+    .sort((a, b) => b.localDate.localeCompare(a.localDate));
+
+  return {
+    campaign,
+    enrollment,
+    protocols,
+    filed,
+    sitrepId,
+    filedDebrief,
+    attacks,
+    outcomes,
+    insights,
+  };
 }
 
 export interface ForgeData {

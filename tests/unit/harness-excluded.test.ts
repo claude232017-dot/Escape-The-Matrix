@@ -34,8 +34,8 @@ const ROOT = fileURLToPath(new URL('../..', import.meta.url));
  * file including a branch Rollup deleted. Asserting on it there would fail permanently and teach
  * whoever hit it to delete the test.
  */
-const MARKER = 'etm-sitrep-harness-fixture';
-const ROUTE = '/harness/sitrep';
+const MARKERS = ['etm-sitrep-harness-fixture', 'etm-ledger-harness-fixture'];
+const ROUTES = ['/harness/sitrep', '/harness/ledger'];
 const CODE_EXTENSIONS = ['.js', '.mjs', '.cjs', '.css', '.html'];
 
 let outDir: string | null = null;
@@ -77,8 +77,12 @@ describe('the test harness', () => {
       const found: string[] = [];
       // The fixture string reaching any emitted file — including a sourcemap — means the harness
       // module was bundled.
-      if (content.includes(MARKER)) found.push(`${name} contains the harness fixture`);
-      if (isCode && content.includes(ROUTE)) found.push(`${name} still routes to the harness`);
+      for (const marker of MARKERS) {
+        if (content.includes(marker)) found.push(`${name} contains ${marker}`);
+      }
+      for (const route of ROUTES) {
+        if (isCode && content.includes(route)) found.push(`${name} still routes to ${route}`);
+      }
       return found;
     });
     expect(offenders, 'the harness survived into a production build').toEqual([]);

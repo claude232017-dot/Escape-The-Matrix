@@ -25,6 +25,7 @@ other. Current pairs:
 | A MED option may only accompany a MED pass | `setStatus()`, `src/features/forge/sitrep-draft.ts` | `protocol_results_med_option_only_for_med_pass` |
 | An insight needs both its halves | `insightState()`, `src/features/forge/debrief-draft.ts` | `debriefs_insight_paired` |
 | An attack has an outcome; a quiet day does not | `blockers()`, `src/features/forge/debrief-draft.ts` | `debriefs_outcome_iff_attacked` |
+| Money is bigint minor units | `src/lib/money.ts` | `money_entries.amount_minor bigint` + `app.currency_code` |
 | The hour an attack landed, in his own timezone | `localHour()`, `src/features/forge/debrief-draft.ts` | `bottom_g_tactics.occurred_at_hour`, stored as a plain 0–23 integer |
 | What today's date is, for a member | `getLocalDateString()`, `src/lib/date.ts` | `app.today_for()`, and inlined once in `public.start_campaign_enrollment()` |
 | What a day amounts to (complete / repeat / reset) | `evaluateDay()`, `src/features/forge/doctrine.ts` | not enforced in SQL — see below |
@@ -85,6 +86,7 @@ row is attributable to a specific named man who knows the others.
 | Per-protocol visibility | Configurable per protocol (`protocols.visibility`) | Phase 2 |
 | Sensitive protocols | Default to **`aggregate_only`** — they count toward the day's status, which the circle sees, but are **not itemised to peers** | Phase 2 |
 | Psychological failure patterns | `bottom_g_tactics` — the hour a man is weakest, the trigger that beats him, and the lie he tells himself. **Self and mentor only; peers get zero rows.** | Phase 3 |
+| Revenue and amounts | `money_entries` — **self and mentor only; peers get zero rows.** Effort is comparable because everyone controls it; revenue is not, and a column of amounts beside each other's names is a league table rather than a circle | Phase 4 |
 | Mentor access | A deliberate, stated choice the member sees **at enrollment**, never a silent default | Phase 2 — see §3 |
 | Third-party analytics / error reporting / log aggregation | **Never** receives protocol detail. Scrubbed at the boundary, and the scrubbing is tested by asserting on the outgoing payloads | Phase 9 |
 | Export | Includes everything the member owns, including the full war log | Phase 8 |
@@ -176,6 +178,16 @@ Filled in per phase. Every cell gets a test. Phase 9 requires a passing test per
 | `bottom_g_tactics` | `anon` | ✗ | ✗ | ✗ | ✗ |
 | `bottom_g_tactics` | member | ✓ **own only** | ✓ own | ✓ own | ✓ own |
 | `bottom_g_tactics` | mentor | ✓ own + circle | ✓ own | ✓ own | ✓ own |
+| `ventures` | `anon` | ✗ | ✗ | ✗ | ✗ |
+| `ventures` | member | ✓ circle | ✓ own | ✓ own | ✓ own |
+| `business_actions` | `anon` | ✗ | ✗ | ✗ | ✗ |
+| `business_actions` | member | ✓ own circle | ✗ | ✗ | ✗ |
+| `business_actions` | mentor | ✓ own circle | ✓ own circle | ✓ own circle | ✓ own circle |
+| `daily_business_entries` | `anon` | ✗ | ✗ | ✗ | ✗ |
+| `daily_business_entries` | member | ✓ circle | ✓ own | ✓ own | ✓ own |
+| `money_entries` | `anon` | ✗ | ✗ | ✗ | ✗ |
+| `money_entries` | member | ✓ **own only** | ✓ own | ✓ own | ✓ own |
+| `money_entries` | mentor | ✓ own + circle | ✓ own | ✓ own | ✓ own |
 
 Legend: ✓ own — own rows only. ✓ circle — rows in the member's circle. ✓ all —
 unrestricted. ✗ — no policy or no grant, therefore denied.
@@ -187,6 +199,12 @@ The row that matters most is `protocol_results` for a **member**. A peer may rea
 when the protocol is marked `itemised`; for `sexual-discipline` and `alcohol-and-drugs` he gets
 **zero rows**. That is the §2 handling table enforced rather than described, and it is asserted
 directly rather than inferred from the policy text.
+
+The Ledger splits the same way, and the reason is worth stating because it is not obvious.
+**Effort is circle-readable; amounts are not.** Offers made and deep work blocks are things every
+man controls, so comparing them is accountability — that is what ADR-003 means by choosing leading
+indicators. Revenue is not under his control, and a column of amounts beside each other's names is
+a league table rather than a circle. That is the social feed §1 rules out, wearing a different hat.
 
 The debrief's two tables are the same principle applied a second time, and the reason it is two
 tables rather than one. The **Top G Insight** is a system that worked, so the circle reads it —
@@ -213,6 +231,7 @@ policy above still applies inside them — see ADR-012.
 | `public.file_sitrep(...)` | ✗ revoked | ✓ own enrollment only |
 | `public.start_campaign_enrollment(uuid)` | ✗ revoked | ✓ own profile only |
 | `public.file_debrief(...)` | ✗ revoked | ✓ own day only |
+| `public.file_business_day(...)` | ✗ revoked | ✓ own venture only |
 
 Functions in `public` are EXECUTE-to-PUBLIC by default, and the default privileges revoked in
 `0001_baseline.sql` do **not** remove that grant — so a new function is exposed to `anon` unless a

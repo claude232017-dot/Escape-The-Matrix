@@ -149,6 +149,19 @@ decision he makes rather than a row that appeared while he was asleep. Joining l
 back-date him — `public.start_campaign_enrollment` starts him on the later of the campaign start
 and his own today.
 
+### Opening the Ledger
+
+Run `supabase/bootstrap/03_business_actions.sql` before anyone opens the Ledger tab. It seeds
+ADR-003's six leading indicators into the circle; until it runs, the Ledger shows a venture with
+nothing to record against it, which reads as a broken screen rather than a missing setup step.
+
+A script rather than a button for the same reason as the campaign: the action list *is* the
+commercial doctrine. It decides what twelve men optimise for over thirty days, and getting it
+wrong produces a month of the wrong work rather than a bad dashboard. Safe to re-run; it restores
+anything deleted and leaves anything edited alone.
+
+Members then add their own ventures from the Ledger tab — that part is theirs, not the mentor's.
+
 A campaign is a once-a-month decision by one person, which is why it is a script and not a
 screen. To run a second one, change `v_name` and `v_starts_on` and run it again; the first
 campaign's history stays readable under the ruleset it was actually run under.

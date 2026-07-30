@@ -209,21 +209,36 @@ that difference in a policy someone could loosen without noticing.
 A cross-table trigger rejects a tactic on a day he said was quiet. Both tables carry DELETE,
 unlike the Forge's — a debrief is his own reflection, not a record of what he did.
 
+### The Ledger — `0006_ledger.sql`
+
+Split by audience, like the debrief (ADR-013): **effort is circle-readable, amounts are not.**
+
+- **`ventures`** — `owner_id`, `name`, `kind` (free text, capped — the circle's businesses are not
+  a taxonomy anyone can enumerate in advance), `status`, `started_on`. Circle-readable: knowing
+  what a man is building is the premise of the circle.
+- **`business_actions`** — the seeded catalogue of leading indicators, per circle: `slug`, `label`,
+  `unit`, `hint`, `is_active`. Mentor-editable. A **constraint trigger caps it at seven active
+  rows**, which is ADR-003's ceiling enforced rather than documented.
+- **`daily_business_entries`** — `profile_id`, `local_date`, `venture_id`, `action_id`, `count`.
+  Unique on the tuple, which is also the outbox coalescing key. Counts are `integer` and nothing
+  here is a tick.
+- **`money_entries`** — `venture_id`, `occurred_on`, `direction`, `amount_minor` (`bigint`, always
+  **positive** — direction says which way), `currency`, `category`, `is_recurring`, `note`. The
+  primary key has **no default**: the client generates it, which is what makes an outbox retry
+  land on the same row instead of booking the payment twice. Self and mentor only.
+- **`public.file_business_day(venture, date, counts)`** — one venture-day in one call, idempotent.
+  Upserts rather than delete-then-inserts, because an absent action means "not recorded" rather
+  than "changed to zero".
+
 ## Planned
 
-### The Ledger — Phase 4
+### Commitments — Phase 5
 
-- **`ventures`** — `owner_id`, `name`, `kind`, `status`, `started_on`.
-- **`business_actions`** — the catalogue of leading indicators: `slug`, `label`, `unit`.
-- **`daily_business_entries`** — `profile_id`, `local_date`, `venture_id`, `action_id`,
-  `count`. Unique on the tuple — **this is the outbox coalescing key**.
-- **`money_entries`** — `venture_id`, `occurred_on`, `direction`, `amount_minor` (`bigint`),
-  `currency` (`app.currency_code`), `category`, `is_recurring`.
 - **`commitments`** — `profile_id`, `week_start`, `text` (`app.capped_text_140`),
   `outcome` (`pending` | `hit` | `missed`), `resolved_at`. **Max three per week, by
   constraint.**
 
-### Command — Phases 5–7
+### Command — Phases 6–7
 
 - **`weekly_reviews`** — `profile_id`, `week_start`, three capped structured fields, plus a
   **snapshot of the computed numbers**. Not optional: recomputing history from live

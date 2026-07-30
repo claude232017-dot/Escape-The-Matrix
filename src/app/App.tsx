@@ -29,7 +29,8 @@ import { SignedInShell } from '@/app/SignedInShell';
  * that were only a runtime check would be a way to reach the Forge without a session.
  */
 const HARNESS_ENABLED = import.meta.env.VITE_TEST_HARNESS === '1';
-const HARNESS_PATH = '/harness/sitrep';
+const SITREP_HARNESS_PATH = '/harness/sitrep';
+const LEDGER_HARNESS_PATH = '/harness/ledger';
 
 const SitrepHarness = HARNESS_ENABLED
   ? lazy(() =>
@@ -37,17 +38,32 @@ const SitrepHarness = HARNESS_ENABLED
     )
   : null;
 
+const LedgerHarness = HARNESS_ENABLED
+  ? lazy(() =>
+      import('@/app/harness/LedgerHarness').then((module) => ({ default: module.LedgerHarness })),
+    )
+  : null;
+
 export function App() {
-  if (SitrepHarness && window.location.pathname === HARNESS_PATH) {
-    return (
-      <ErrorBoundary>
-        <Motion>
-          <Suspense fallback={<p className="p-4 text-sm text-text-muted">Loading harness…</p>}>
-            <SitrepHarness />
-          </Suspense>
-        </Motion>
-      </ErrorBoundary>
-    );
+  if (HARNESS_ENABLED && SitrepHarness && LedgerHarness) {
+    const path = window.location.pathname;
+    const Harness =
+      path === SITREP_HARNESS_PATH
+        ? SitrepHarness
+        : path === LEDGER_HARNESS_PATH
+          ? LedgerHarness
+          : null;
+    if (Harness) {
+      return (
+        <ErrorBoundary>
+          <Motion>
+            <Suspense fallback={<p className="p-4 text-sm text-text-muted">Loading harness…</p>}>
+              <Harness />
+            </Suspense>
+          </Motion>
+        </ErrorBoundary>
+      );
+    }
   }
 
   return (

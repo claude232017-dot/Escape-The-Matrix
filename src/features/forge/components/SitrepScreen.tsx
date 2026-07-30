@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { campaignDay, getLocalDateString } from '@/lib/date';
 import { readScoped, writeScoped, type StorageLike } from '@/lib/local-state';
 import type { OutboxEntry } from '@/lib/outbox';
-import type { ProtocolStatus } from '@/features/forge/doctrine';
+import { activeProtocols, type ProtocolStatus } from '@/features/forge/doctrine';
 import { getSupabase } from '@/lib/supabase';
 import {
   draftKey,
@@ -18,6 +18,19 @@ import {
 import { refusalMessage, sendSitrep } from '@/features/forge/sitrep-write';
 import { describeQueue, useOutbox } from '@/features/forge/use-outbox';
 import { SitrepForm, type FileState } from '@/features/forge/components/SitrepForm';
+import { DebriefForm } from '@/features/forge/components/DebriefForm';
+import {
+  debriefKey,
+  emptyDebrief,
+  localHour,
+  toPayload as toDebriefPayload,
+  type AttackRecord,
+  type DebriefDraft,
+  type DebriefPayload,
+  type TriggerKind,
+} from '@/features/forge/debrief-draft';
+import { debriefRefusalMessage, sendDebrief } from '@/features/forge/debrief-write';
+import { AttackPatternPanel } from '@/features/forge/components/AttackPatternPanel';
 import { Button } from '@/ui/Button';
 
 /**
@@ -60,6 +73,12 @@ interface Loaded {
   protocols: ProtocolWithMed[];
   /** Results already on the server for today, keyed by slug. */
   filed: SitrepDraft | null;
+  /** Today's SITREP row. Null until the day is filed — a debrief hangs off a filed day. */
+  sitrepId: string | null;
+  /** The debrief already on the server for today, if any. */
+  filedDebrief: { draft: DebriefDraft; triggerKind: TriggerKind | null } | null;
+  /** Every attack he has logged, for the pattern readback. */
+  attacks: AttackRecord[];
 }
 
 interface MedOptionRow {
@@ -108,12 +127,20 @@ export function SitrepScreen({ profileId, timezone, artefacts }: SitrepScreenPro
   const [joining, setJoining] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
 
-  const send = useCallback(
-    async (entry: OutboxEntry) => {
-      await sendSitrep(entry.payload as SitrepPayload);
-    },
-    [],
-  );
+  const [debrief, setDebrief] = useState<DebriefDraft>(emptyDebrief);
+  const [triggerKind, setTriggerKind] = useState<TriggerKind | null>(null);
+  const [debriefState, setDebriefState] = useState<FileState>('idle');
+  const [debriefRefusal, setDebriefRefusal] = useState<string | null>(null);
+
+  // One outbox, two kinds of write. Dispatched on the key rather than by sniffing the payload's
+  // shape: the key is what the queue coalesces on, so it is the thing guaranteed to be right.
+  const send = useCallback(async (entry: OutboxEntry) => {
+    if (entry.key.startsWith('debrief:')) {
+      await sendDebrief(entry.payload as DebriefPayload);
+      return;
+    }
+    await sendSitrep(entry.payload as SitrepPayload);
+  }, []);
   const outbox = useOutbox(profileId, send);
 
   const load = useCallback(async (): Promise<Loaded | null> => {
@@ -169,7 +196,17 @@ export function SitrepScreen({ profileId, timezone, artefacts }: SitrepScreenPro
       .limit(1);
     if (enrollmentError) throw new Error(enrollmentError.message);
     const enrollmentRow = enrollmentRows?.[0];
-    if (!enrollmentRow) return { campaign, enrollment: null, protocols, filed: null };
+    if (!enrollmentRow) {
+      return {
+        campaign,
+        enrollment: null,
+        protocols,
+        filed: null,
+        sitrepId: null,
+        filedDebrief: null,
+        attacks: [],
+      };
+    }
 
     const enrollment: Enrollment = {
       id: enrollmentRow.id as string,
@@ -200,7 +237,86 @@ export function SitrepScreen({ profileId, timezone, artefacts }: SitrepScreenPro
         )
       : null;
 
-    return { campaign, enrollment, protocols, filed };
+    const sitrepId = (sitrepRows?.[0]?.id as string | undefined) ?? null;
+
+    // The debrief for today, and every attack he has ever logged. Two queries rather than one
+    // join: the pattern spans enrollments on purpose — a reset returns his day count to 1, but it
+    // does not make him a different man, and the enemy's timetable does not restart with it.
+    let filedDebrief: Loaded['filedDebrief'] = null;
+    if (sitrepId) {
+      const { data: debriefRows, error: debriefError } = await supabase
+        .from('debriefs')
+        .select(
+          'system_used, victory, insight_protocol_id, attacked, outcome, bottom_g_tactics:bottom_g_tactics!inner(occurred_at_hour, trigger_kind, propaganda, protocol_id)',
+        )
+        .eq('sitrep_id', sitrepId)
+        .limit(1);
+      // A quiet day has no tactic row, so the inner join returns nothing. Fall back to the
+      // debrief alone rather than treating "no attack" as "no debrief".
+      const withTactic = debriefError ? null : (debriefRows?.[0] ?? null);
+      const row =
+        withTactic ??
+        (
+          await supabase
+            .from('debriefs')
+            .select('system_used, victory, insight_protocol_id, attacked, outcome')
+            .eq('sitrep_id', sitrepId)
+            .limit(1)
+        ).data?.[0] ??
+        null;
+
+      if (row) {
+        const record = row as Record<string, unknown>;
+        const tactic = (record['bottom_g_tactics'] as Record<string, unknown>[] | undefined)?.[0];
+        filedDebrief = {
+          draft: {
+            systemUsed: (record['system_used'] as string | null) ?? '',
+            victory: (record['victory'] as string | null) ?? '',
+            insightProtocolId: (record['insight_protocol_id'] as string | null) ?? null,
+            attacked: record['attacked'] as boolean,
+            outcome: (record['outcome'] as DebriefDraft['outcome']) ?? null,
+            occurredAtHour: (tactic?.['occurred_at_hour'] as number | undefined) ?? null,
+            propaganda: (tactic?.['propaganda'] as string | null) ?? '',
+            attackedProtocolId: (tactic?.['protocol_id'] as string | null) ?? null,
+          },
+          triggerKind: (tactic?.['trigger_kind'] as TriggerKind | undefined) ?? null,
+        };
+      }
+    }
+
+    const { data: attackRows } = await supabase
+      .from('bottom_g_tactics')
+      .select('occurred_at_hour, trigger_kind, sitreps!inner(id, enrollments!inner(profile_id))')
+      .eq('sitreps.enrollments.profile_id', profileId);
+
+    // The outcome lives on `debriefs`, so it is joined back through the sitrep rather than
+    // duplicated onto the tactic — one fact, one place.
+    const { data: outcomeRows } = await supabase
+      .from('debriefs')
+      .select('sitrep_id, outcome')
+      .not('outcome', 'is', null);
+    const outcomeBySitrep = new Map(
+      ((outcomeRows ?? []) as { sitrep_id: string; outcome: string }[]).map((row) => [
+        row.sitrep_id,
+        row.outcome,
+      ]),
+    );
+
+    const attacks: AttackRecord[] = ((attackRows ?? []) as unknown as {
+      occurred_at_hour: number;
+      trigger_kind: TriggerKind;
+      sitreps: { id: string } | null;
+    }[]).flatMap((row) => {
+      const outcome = row.sitreps ? outcomeBySitrep.get(row.sitreps.id) : undefined;
+      // An attack with no readable outcome is dropped rather than defaulted. Guessing 'lost'
+      // would inflate the very number this panel exists to report honestly.
+      if (outcome !== 'resisted' && outcome !== 'partial' && outcome !== 'lost') return [];
+      return [
+        { occurredAtHour: row.occurred_at_hour, triggerKind: row.trigger_kind, outcome },
+      ];
+    });
+
+    return { campaign, enrollment, protocols, filed, sitrepId, filedDebrief, attacks };
   }, [profileId, today]);
 
   useEffect(() => {
@@ -226,6 +342,8 @@ export function SitrepScreen({ profileId, timezone, artefacts }: SitrepScreenPro
             )
           : null;
         setDraft(result.filed ?? local ?? emptyDraft());
+        setDebrief(result.filedDebrief?.draft ?? emptyDebrief());
+        setTriggerKind(result.filedDebrief?.triggerKind ?? null);
       })
       .catch((cause: unknown) => {
         if (!cancelled) setLoadError(cause instanceof Error ? cause.message : 'Could not load the campaign.');
@@ -325,6 +443,64 @@ export function SitrepScreen({ profileId, timezone, artefacts }: SitrepScreenPro
     }
   }, [day, draft, loaded, outbox, today]);
 
+  const onDebriefChange = useCallback((patch: Partial<DebriefDraft>) => {
+    setDebrief((current) => {
+      const next = { ...current, ...patch };
+      // Amending "he attacked" down to "quiet day" clears the attack fields here as well as in
+      // toPayload. Mirror: file_debrief deletes the tactic row, and debriefs_outcome_iff_attacked
+      // rejects an outcome with no attack — a stale outcome left on screen would be a claim about
+      // a fight that, as far as the record is concerned, never happened.
+      if (patch.attacked === false) {
+        return {
+          ...next,
+          outcome: null,
+          occurredAtHour: null,
+          propaganda: '',
+          attackedProtocolId: null,
+        };
+      }
+      return next;
+    });
+    if (patch.attacked === false) setTriggerKind(null);
+    setDebriefRefusal(null);
+    setDebriefState('idle');
+  }, []);
+
+  const onTrigger = useCallback((kind: TriggerKind) => {
+    setTriggerKind(kind);
+    setDebriefRefusal(null);
+    setDebriefState('idle');
+  }, []);
+
+  const filingDebrief = useRef(false);
+
+  const onFileDebrief = useCallback(async () => {
+    const sitrepId = loaded?.sitrepId;
+    if (filingDebrief.current || !sitrepId) return;
+    const payload = toDebriefPayload(sitrepId, debrief, triggerKind);
+    if (!payload) return;
+
+    filingDebrief.current = true;
+    setDebriefState('working');
+    setDebriefRefusal(null);
+    try {
+      const outcome = await outbox.queue(debriefKey(sitrepId), payload);
+      if (outcome.sent) {
+        setDebriefState('sent');
+        setReloadToken((token) => token + 1);
+      } else if (outcome.refused) {
+        setDebriefState('refused');
+        setDebriefRefusal(debriefRefusalMessage(outcome.failure?.message ?? 'Unknown reason'));
+      } else if (outcome.lost) {
+        setDebriefState('lost');
+      } else {
+        setDebriefState('held');
+      }
+    } finally {
+      filingDebrief.current = false;
+    }
+  }, [debrief, loaded?.sitrepId, outbox, triggerKind]);
+
   const onJoin = useCallback(async () => {
     if (!loaded?.campaign) return;
     setJoining(true);
@@ -373,26 +549,66 @@ export function SitrepScreen({ profileId, timezone, artefacts }: SitrepScreenPro
   }
 
   return (
-    <SitrepForm
-      day={day}
+    <div className="flex flex-col gap-6">
+      <SitrepForm
+        day={day}
       localDate={today}
-      campaignLengthDays={loaded.campaign.lengthDays}
-      protocols={loaded.protocols}
-      draft={draft}
-      evaluation={evaluation}
-      artefacts={artefacts}
-      alreadyFiled={loaded.filed !== null}
-      fileState={fileState}
-      queueMessage={
-        fileState === 'sent' && outbox.status.state === 'empty'
-          ? 'Filed. It is on the server.'
-          : describeQueue(outbox)
-      }
-      refusal={refusal}
-      onStatus={onStatus}
-      onMedOption={onMedOption}
-      onFile={() => void onFile()}
-    />
+        campaignLengthDays={loaded.campaign.lengthDays}
+        protocols={loaded.protocols}
+        draft={draft}
+        evaluation={evaluation}
+        artefacts={artefacts}
+        alreadyFiled={loaded.filed !== null}
+        fileState={fileState}
+        queueMessage={
+          fileState === 'sent' && outbox.status.state === 'empty'
+            ? 'Filed. It is on the server.'
+            : describeQueue(outbox)
+        }
+        refusal={refusal}
+        onStatus={onStatus}
+        onMedOption={onMedOption}
+        onFile={() => void onFile()}
+      />
+
+      {/* The debrief hangs off a filed day, because it debriefs one. Offering it before the
+          SITREP is filed would let a man record what the enemy did on a day he has not yet said
+          happened — and the sixty-second budget is for the SITREP alone, so the two are
+          deliberately separate steps rather than one long form. */}
+      {loaded.sitrepId ? (
+        <DebriefForm
+          draft={debrief}
+          triggerKind={triggerKind}
+          protocols={activeProtocols(loaded.protocols, day)}
+          currentHour={localHour(timezone)}
+          state={debriefState}
+          statusMessage={
+            debriefState === 'sent' && outbox.status.state === 'empty'
+              ? 'Filed. It is on the server.'
+              : debriefState === 'idle'
+                ? 'Not filed yet.'
+                : describeQueue(outbox)
+          }
+          refusal={debriefRefusal}
+          alreadyFiled={loaded.filedDebrief !== null}
+          onChange={onDebriefChange}
+          onTrigger={onTrigger}
+          onFile={() => void onFileDebrief()}
+        />
+      ) : (
+        <section className="rounded-[var(--radius-lg)] border border-border-subtle bg-surface-raised p-4 sm:p-6">
+          <h2 className="text-xs font-semibold tracking-[0.18em] text-text-muted uppercase">
+            Debrief
+          </h2>
+          <p className="mt-2 max-w-prose text-sm leading-relaxed text-text-secondary">
+            Available once today&apos;s SITREP is filed. A debrief describes a day you have
+            already reported.
+          </p>
+        </section>
+      )}
+
+      <AttackPatternPanel attacks={loaded.attacks} />
+    </div>
   );
 }
 

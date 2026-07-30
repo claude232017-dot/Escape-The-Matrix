@@ -13,8 +13,9 @@ import { Button } from '@/ui/Button';
  * the auth feature and passes plain values down to the circle and profile features, so none of
  * them import each other.
  *
- * Phase 1 has no Forge and no Ledger, so this is honest about what is missing rather than
- * showing empty widgets that imply the data is merely absent.
+ * The Forge sits above the build status, because it is what a man opens this for and the only
+ * thing here with a deadline. The Ledger is not built, and this says so rather than showing an
+ * empty widget that implies the data is merely absent.
  */
 export function SignedInShell() {
   const { profile, signOut, refreshProfile, busy } = useAuth();
@@ -118,9 +119,9 @@ export function SignedInShell() {
               <span className="text-text-secondary">— {PHASE_LABEL}</span>
             </p>
             <p className="mt-4 max-w-prose text-sm leading-relaxed text-text-secondary">
-              The Forge is live: protocols, the MED and the daily SITREP. The Ledger — ventures,
-              business actions and revenue — is not built yet, so nothing correlates against
-              income yet.
+              The Forge is live end to end: protocols, the MED, the daily SITREP and the
+              debrief. The Ledger — ventures, business actions and revenue — is not built yet, so
+              there is nothing to correlate discipline against.
             </p>
             <dl className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Fact term="Your timezone" detail={profile.timezone} />

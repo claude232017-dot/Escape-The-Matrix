@@ -10,6 +10,15 @@ import {
 } from '@/features/forge/sitrep-draft';
 import type { ProtocolStatus } from '@/features/forge/doctrine';
 import { SitrepForm, type FileState } from '@/features/forge/components/SitrepForm';
+import { DebriefForm } from '@/features/forge/components/DebriefForm';
+import { AttackPatternPanel } from '@/features/forge/components/AttackPatternPanel';
+import {
+  emptyDebrief,
+  toPayload as toDebriefPayload,
+  type AttackRecord,
+  type DebriefDraft,
+  type TriggerKind,
+} from '@/features/forge/debrief-draft';
 
 /**
  * The SITREP screen with fixture data and no network.
@@ -140,6 +149,30 @@ const ARTEFACTS = {
 };
 
 /**
+ * A history of attacks, so the pattern panel has something to refuse to over-claim about.
+ *
+ * `?attacks=` sets how many are present: 0 hides the panel, a number below PATTERN_MINIMUM shows
+ * the honest "not enough yet", and the default is enough to name a window.
+ */
+function fixtureAttacks(count: number): AttackRecord[] {
+  const shape: AttackRecord[] = [
+    { occurredAtHour: 15, triggerKind: 'low_energy', outcome: 'lost' },
+    { occurredAtHour: 15, triggerKind: 'low_energy', outcome: 'lost' },
+    { occurredAtHour: 16, triggerKind: 'low_energy', outcome: 'resisted' },
+    { occurredAtHour: 14, triggerKind: 'stress', outcome: 'partial' },
+    { occurredAtHour: 15, triggerKind: 'boredom', outcome: 'resisted' },
+    { occurredAtHour: 9, triggerKind: 'stress', outcome: 'resisted' },
+  ];
+  return shape.slice(0, Math.min(count, shape.length));
+}
+
+function numberFromUrl(name: string, fallback: number): number {
+  const raw = new URLSearchParams(window.location.search).get(name);
+  const parsed = raw === null ? fallback : Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+/**
  * Day 22 by default — every protocol live, which is the worst case for the sixty-second budget.
  * `?day=` overrides it so the activation schedule can be checked from a test.
  */
@@ -151,9 +184,15 @@ function dayFromUrl(): number {
 
 export function SitrepHarness() {
   const day = useMemo(() => dayFromUrl(), []);
+  const attacks = useMemo(() => fixtureAttacks(numberFromUrl('attacks', 6)), []);
   const [draft, setDraft] = useState<SitrepDraft>(emptyDraft);
   const [fileState, setFileState] = useState<FileState>('idle');
   const [filed, setFiled] = useState<string | null>(null);
+
+  const [debrief, setDebrief] = useState<DebriefDraft>(emptyDebrief);
+  const [triggerKind, setTriggerKind] = useState<TriggerKind | null>(null);
+  const [debriefState, setDebriefState] = useState<FileState>('idle');
+  const [debriefFiled, setDebriefFiled] = useState<string | null>(null);
 
   const evaluation = useMemo(
     () => evaluateDraft({ draft, protocols: FIXTURE_PROTOCOLS, day }),
@@ -184,6 +223,30 @@ export function SitrepHarness() {
     setFileState(payload ? 'sent' : 'idle');
   }, [draft, day]);
 
+  // Mirrors the clearing rule in SitrepScreen.onDebriefChange, which mirrors the SQL constraint.
+  const onDebriefChange = useCallback((patch: Partial<DebriefDraft>) => {
+    setDebrief((current) => {
+      const next = { ...current, ...patch };
+      if (patch.attacked === false) {
+        return { ...next, outcome: null, occurredAtHour: null, propaganda: '', attackedProtocolId: null };
+      }
+      return next;
+    });
+    if (patch.attacked === false) setTriggerKind(null);
+    setDebriefState('idle');
+  }, []);
+
+  const onTrigger = useCallback((kind: TriggerKind) => {
+    setTriggerKind(kind);
+    setDebriefState('idle');
+  }, []);
+
+  const onFileDebrief = useCallback(() => {
+    const payload = toDebriefPayload('harness-sitrep', debrief, triggerKind);
+    setDebriefFiled(payload ? JSON.stringify(payload) : null);
+    setDebriefState(payload ? 'sent' : 'idle');
+  }, [debrief, triggerKind]);
+
   return (
     <div className="min-h-dvh bg-surface-void px-4 py-6" data-harness={HARNESS_MARKER}>
       <main id="main" className="mx-auto w-full max-w-2xl">
@@ -207,6 +270,25 @@ export function SitrepHarness() {
         />
         {/* The payload, so a test can assert what would have been written rather than trusting
             the screen's own summary of it. */}
+        <div className="mt-6 flex flex-col gap-6">
+          <DebriefForm
+            draft={debrief}
+            triggerKind={triggerKind}
+            protocols={FIXTURE_PROTOCOLS}
+            currentHour={15}
+            state={debriefState}
+            statusMessage={debriefState === 'sent' ? 'Filed. It is on the server.' : 'Not filed yet.'}
+            refusal={null}
+            alreadyFiled={false}
+            onChange={onDebriefChange}
+            onTrigger={onTrigger}
+            onFile={onFileDebrief}
+          />
+          <AttackPatternPanel attacks={attacks} />
+        </div>
+        <pre data-testid="filed-debrief" className="sr-only">
+          {debriefFiled ?? ''}
+        </pre>
         <pre data-testid="filed-payload" className="sr-only">
           {filed ?? ''}
         </pre>

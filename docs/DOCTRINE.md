@@ -275,6 +275,24 @@ Mostly enums, because this is the table that has to aggregate.
 | `protocol_id` | fk, nullable | Which protocol was attacked |
 | `outcome` | enum | `resisted`, `partial`, `lost` |
 
+### 6.2.1 What the app does with these fields
+
+- The attack question is **always answered**. "He did not attack" and "I did not fill this in"
+  are different facts, and a schema that cannot tell them apart loses the denominator for every
+  rate below. Mirror: `debriefs.attacked` is `NOT NULL`.
+- The insight is **optional**. A man required to produce a victory every single day starts
+  inventing them, and invented intelligence is worse than none. Both halves or neither, though —
+  a system with no victory is a habit, a victory with no system is a feeling.
+- `occurred_at_hour` is his **local** hour, resolved before it is stored. A man travelling would
+  otherwise file a 15:00 ambush as 20:00, and the one aggregate this feature exists to produce
+  would quietly stop meaning anything.
+- `partial` counts as a **loss** in the rates. He gave ground, and a metric that only counts
+  total defeats flatters him at exactly the point he needs the truth.
+- The app **refuses to claim a pattern it does not have**. Below five logged attacks, or when
+  they are spread across the day, it says so rather than naming a window. A man who acts on
+  "your enemy attacks at 15:00", finds nothing, and learns the app makes things up will not
+  believe the real finding when it arrives.
+
 ### 6.3 What this buys
 
 Things a chat channel can never say:

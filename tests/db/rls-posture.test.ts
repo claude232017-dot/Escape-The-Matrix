@@ -105,7 +105,7 @@ describeDb('database security posture', () => {
     expect(rows).toHaveLength(1);
     // Bumped by the latest migration. Asserting the exact number rather than ">= 1" so
     // that a migration which forgets to bump it is caught here.
-    expect(rows[0]?.schema_version).toBe(4);
+    expect(rows[0]?.schema_version).toBe(5);
     expect(rows[0]?.doctrine_version).toBe('2026.07-draft');
   });
 
@@ -114,7 +114,7 @@ describeDb('database security posture', () => {
     // anyone holding the anon key. Functions are also EXECUTE-to-PUBLIC by default, and the
     // default privileges revoked in 0001 do not remove that — so a new function is exposed
     // unless a migration explicitly revokes it. This list is the review gate.
-    const ALLOWED_RPCS = ['file_sitrep', 'start_campaign_enrollment'];
+    const ALLOWED_RPCS = ['file_debrief', 'file_sitrep', 'start_campaign_enrollment'];
 
     const { rows } = await client.query<{ proname: string; role: string }>(
       `select p.proname, r.rolname as role

@@ -191,11 +191,25 @@ am I on" cannot have two answers.
   creating it if absent, starting on the later of the campaign start and his own today. Joining
   on day 9 of a campaign means his own Day 1, not day 9.
 
+### The debrief — `0005_debrief.sql`
+
+Two tables, not one, because the halves have different audiences and a single table would put
+that difference in a policy someone could loosen without noticing.
+
+- **`debriefs`** — `sitrep_id` 1:1, `system_used`, `victory`, `insight_protocol_id`, `attacked`
+  (NOT NULL), `outcome`. **Circle-readable**: the insight is a system that worked, which is what a
+  circle is for, and DOCTRINE §7 gives peers "whether he was hit".
+- **`bottom_g_tactics`** — `sitrep_id` 1:1, `occurred_at_hour` (0–23, his local hour),
+  `trigger_kind`, `propaganda`, `protocol_id`. **Self and mentor only.** When a man is weakest and
+  what reliably beats him is a map of how to break him, not a fact about his day.
+- **`public.file_debrief(...)`** writes both in one transaction, idempotently. Amending an attack
+  away deletes the tactic row, because a peer reading `attacked = false` while the mentor reads a
+  15:00 ambush is the worst kind of inconsistency: both believe they see the same day.
+
+A cross-table trigger rejects a tactic on a day he said was quiet. Both tables carry DELETE,
+unlike the Forge's — a debrief is his own reflection, not a record of what he did.
+
 ## Planned
-
-### The debrief — Phase 3
-
-- **`debriefs`** — `sitrep_id` 1:1, plus the fields in DOCTRINE §6.
 
 ### The Ledger — Phase 4
 

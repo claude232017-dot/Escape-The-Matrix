@@ -23,6 +23,9 @@ other. Current pairs:
 | Supported currencies | `CURRENCY_EXPONENTS`, `src/lib/money.ts` | `app.currency_code` + per-table CHECK |
 | One SITREP per member per local date | `src/lib/date.ts` | unique index on `(enrollment_id, local_date)` |
 | A MED option may only accompany a MED pass | `setStatus()`, `src/features/forge/sitrep-draft.ts` | `protocol_results_med_option_only_for_med_pass` |
+| An insight needs both its halves | `insightState()`, `src/features/forge/debrief-draft.ts` | `debriefs_insight_paired` |
+| An attack has an outcome; a quiet day does not | `blockers()`, `src/features/forge/debrief-draft.ts` | `debriefs_outcome_iff_attacked` |
+| The hour an attack landed, in his own timezone | `localHour()`, `src/features/forge/debrief-draft.ts` | `bottom_g_tactics.occurred_at_hour`, stored as a plain 0–23 integer |
 | What today's date is, for a member | `getLocalDateString()`, `src/lib/date.ts` | `app.today_for()`, and inlined once in `public.start_campaign_enrollment()` |
 | What a day amounts to (complete / repeat / reset) | `evaluateDay()`, `src/features/forge/doctrine.ts` | not enforced in SQL — see below |
 
@@ -81,6 +84,7 @@ row is attributable to a specific named man who knows the others.
 |---|---|---|
 | Per-protocol visibility | Configurable per protocol (`protocols.visibility`) | Phase 2 |
 | Sensitive protocols | Default to **`aggregate_only`** — they count toward the day's status, which the circle sees, but are **not itemised to peers** | Phase 2 |
+| Psychological failure patterns | `bottom_g_tactics` — the hour a man is weakest, the trigger that beats him, and the lie he tells himself. **Self and mentor only; peers get zero rows.** | Phase 3 |
 | Mentor access | A deliberate, stated choice the member sees **at enrollment**, never a silent default | Phase 2 — see §3 |
 | Third-party analytics / error reporting / log aggregation | **Never** receives protocol detail. Scrubbed at the boundary, and the scrubbing is tested by asserting on the outgoing payloads | Phase 9 |
 | Export | Includes everything the member owns, including the full war log | Phase 8 |
@@ -166,6 +170,12 @@ Filled in per phase. Every cell gets a test. Phase 9 requires a passing test per
 | `reset_events` | `anon` | ✗ | ✗ | ✗ | ✗ |
 | `reset_events` | member | ✓ own only | ✓ own | ✗ | ✗ **no grant** |
 | `reset_events` | mentor | ✓ own + circle | ✓ own | ✗ | ✗ **no grant** |
+| `debriefs` | `anon` | ✗ | ✗ | ✗ | ✗ |
+| `debriefs` | member | ✓ circle | ✓ own | ✓ own | ✓ own |
+| `debriefs` | mentor | ✓ circle | ✓ own | ✓ own | ✓ own |
+| `bottom_g_tactics` | `anon` | ✗ | ✗ | ✗ | ✗ |
+| `bottom_g_tactics` | member | ✓ **own only** | ✓ own | ✓ own | ✓ own |
+| `bottom_g_tactics` | mentor | ✓ own + circle | ✓ own | ✓ own | ✓ own |
 
 Legend: ✓ own — own rows only. ✓ circle — rows in the member's circle. ✓ all —
 unrestricted. ✗ — no policy or no grant, therefore denied.
@@ -178,9 +188,20 @@ when the protocol is marked `itemised`; for `sexual-discipline` and `alcohol-and
 **zero rows**. That is the §2 handling table enforced rather than described, and it is asserted
 directly rather than inferred from the policy text.
 
+The debrief's two tables are the same principle applied a second time, and the reason it is two
+tables rather than one. The **Top G Insight** is a system that worked, so the circle reads it —
+that is what a circle is for. The **Bottom G Tactic** is when a specific man is weakest, what
+reliably beats him, and the exact lie he tells himself; a peer gets **zero rows**. DOCTRINE §7
+draws the line at "whether he was hit", so `attacked` and `outcome` sit in the peer-readable table
+and everything about *how* sits in the private one. A peer's query cannot return failure detail
+because the columns are not in the table he can read — structural, not a policy someone can loosen
+by accident.
+
 `enrollments`, `sitreps` and `reset_events` have **no DELETE grant at all**. History is never
 destroyed (ADR-002), and the absence of the privilege is what makes that structural rather than a
-convention someone can forget.
+convention someone can forget. The debrief tables *do* have DELETE: a debrief is a man's own
+reflection rather than a record of what he did, and "I was not attacked after all" has to be
+expressible. The day itself is untouched either way.
 
 ### RPCs
 
@@ -191,6 +212,7 @@ policy above still applies inside them — see ADR-012.
 |---|---|---|
 | `public.file_sitrep(...)` | ✗ revoked | ✓ own enrollment only |
 | `public.start_campaign_enrollment(uuid)` | ✗ revoked | ✓ own profile only |
+| `public.file_debrief(...)` | ✗ revoked | ✓ own day only |
 
 Functions in `public` are EXECUTE-to-PUBLIC by default, and the default privileges revoked in
 `0001_baseline.sql` do **not** remove that grant — so a new function is exposed to `anon` unless a

@@ -105,7 +105,7 @@ describeDb('database security posture', () => {
     expect(rows).toHaveLength(1);
     // Bumped by the latest migration. Asserting the exact number rather than ">= 1" so
     // that a migration which forgets to bump it is caught here.
-    expect(rows[0]?.schema_version).toBe(2);
+    expect(rows[0]?.schema_version).toBe(3);
     expect(rows[0]?.doctrine_version).toBe('2026.07-draft');
   });
 

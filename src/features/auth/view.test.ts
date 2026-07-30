@@ -1,17 +1,25 @@
 import { describe, expect, it } from 'vitest';
 import { mayRenderAppContent, resolveAuthView, type AuthInputs } from '@/features/auth/view';
 
+const CURRENT = '2026.07-draft';
+
 const base: AuthInputs = {
   recoveryActive: false,
   session: null,
   profile: null,
+  currentDisclosureVersion: CURRENT,
   profileLoading: false,
   sessionLoading: false,
 };
 
 const signedIn = { userId: 'u1' };
-const accepted = { disclosureAcceptedAt: '2026-07-29T10:00:00Z' };
-const notAccepted = { disclosureAcceptedAt: null };
+const accepted = { disclosureAcceptedAt: '2026-07-29T10:00:00Z', disclosureVersion: CURRENT };
+const notAccepted = { disclosureAcceptedAt: null, disclosureVersion: null };
+/** Accepted, but against wording that has since been replaced. */
+const acceptedOldVersion = {
+  disclosureAcceptedAt: '2026-07-29T10:00:00Z',
+  disclosureVersion: '2026.01-draft',
+};
 
 describe('resolveAuthView', () => {
   it('shows sign-in when there is no session', () => {
@@ -40,6 +48,38 @@ describe('resolveAuthView', () => {
       'disclosure',
     );
     expect(mayRenderAppContent('disclosure')).toBe(false);
+  });
+
+  it('asks again when the disclosure has changed since he accepted it', () => {
+    // SECURITY.md §3: re-consent when the text materially changes. Consent to one disclosure is
+    // not consent to a different one — if a new sensitive protocol is added, or who can read
+    // what changes, an acceptance recorded against the old wording stops counting.
+    //
+    // Without this, `profiles.disclosure_version` is written on acceptance and then never read
+    // by anything, which is a control that exists only in a document.
+    expect(resolveAuthView({ ...base, session: signedIn, profile: acceptedOldVersion })).toBe(
+      'disclosure',
+    );
+  });
+
+  it('asks again when the accepted version is missing or unrecognised', () => {
+    // There is no ordering on these strings, and inventing one would mean guessing which
+    // changes were material. Anything that is not an exact match re-asks.
+    for (const disclosureVersion of [null, '', 'not-a-version', '2099.12-final']) {
+      expect(
+        resolveAuthView({
+          ...base,
+          session: signedIn,
+          profile: { disclosureAcceptedAt: '2026-07-29T10:00:00Z', disclosureVersion },
+        }),
+        `version ${String(disclosureVersion)} was let through`,
+      ).toBe('disclosure');
+    }
+  });
+
+  it('does not ask again when the version still matches', () => {
+    // The other half of the rule. A gate that always fires is a gate nobody can accept past.
+    expect(resolveAuthView({ ...base, session: signedIn, profile: accepted })).toBe('app');
   });
 
   it('names the missing-profile case instead of showing an empty app', () => {
@@ -91,13 +131,16 @@ describe('recovery beats everything — the §3.7 requirement', () => {
     for (const sessionLoading of [true, false]) {
       for (const profileLoading of [true, false]) {
         for (const session of [null, signedIn]) {
-          for (const profile of [null, accepted, notAccepted]) {
+          // Including the stale-version profile: re-consent is a blocking view too, and
+          // recovery has to beat it for the same reason it beats the first disclosure.
+          for (const profile of [null, accepted, notAccepted, acceptedOldVersion]) {
             const view = resolveAuthView({
               recoveryActive: true,
               sessionLoading,
               profileLoading,
               session,
               profile,
+              currentDisclosureVersion: CURRENT,
             });
             expect(
               view,

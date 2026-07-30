@@ -14,6 +14,7 @@ import { clearUserState } from '@/lib/local-state';
 import { isRecoveryUrl, stripRecoveryFromUrl } from '@/features/auth/recovery';
 import { resolveAuthView, type AuthView } from '@/features/auth/view';
 import { authErrorMessage } from '@/features/auth/error-message';
+import { DISCLOSURE_VERSION } from '@/features/auth/disclosure';
 
 export interface SignUpInput {
   email: string;
@@ -350,7 +351,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const view = resolveAuthView({
     recoveryActive,
     session: session ? { userId: session.user.id } : null,
-    profile: profile ? { disclosureAcceptedAt: profile.disclosureAcceptedAt } : null,
+    profile: profile
+      ? {
+          disclosureAcceptedAt: profile.disclosureAcceptedAt,
+          disclosureVersion: profile.disclosureVersion,
+        }
+      : null,
+    currentDisclosureVersion: DISCLOSURE_VERSION,
     profileLoading,
     sessionLoading,
   });

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Button } from '@/ui/Button';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { AuthShell, FormError } from '@/features/auth/components/AuthShell';
+import { DisclosureBody } from '@/features/auth/components/DisclosureBody';
 import { DISCLOSURE_VERSION } from '@/features/auth/disclosure';
 
 /**
@@ -21,51 +22,34 @@ export function DisclosureScreen() {
   const { acceptDisclosure, signOut, profile, error, busy } = useAuth();
   const [confirmed, setConfirmed] = useState(false);
 
+  // He has agreed to *something*, but not to this. SECURITY.md §3 requires re-consent when the
+  // text materially changes, and the honest way to ask is to say what happened rather than
+  // showing the same screen again as though he had never seen it.
+  const reconsent = profile?.disclosureAcceptedAt != null;
+
   return (
     <AuthShell
-      title="Before you start"
-      subtitle="Read this once. It describes exactly who can see what you record."
+      title={reconsent ? 'This has been updated' : 'Before you start'}
+      subtitle={
+        reconsent
+          ? 'The disclosure has changed. Read it again — it describes who can see what you record.'
+          : 'Read this once. It describes exactly who can see what you record.'
+      }
     >
       <div className="flex flex-col gap-5 text-sm leading-relaxed text-text-secondary">
-        <section className="flex flex-col gap-2">
-          <h2 className="text-xs font-semibold tracking-[0.14em] text-text-primary uppercase">
-            What the mentor sees
-          </h2>
-          <p>
-            <strong className="text-text-primary">Everything you record, itemised.</strong> Which
-            protocols you passed, which you passed at MED, and which you failed — including the
-            sexual-discipline protocol and the ones covering alcohol and drugs. He also sees your
-            debriefs, your commitments and your revenue.
+        {reconsent ? (
+          <p
+            data-testid="disclosure-changed"
+            className="rounded-[var(--radius-md)] border-l-2 border-status-med bg-surface-raised px-3 py-2 text-text-primary"
+          >
+            <strong>This has changed since you agreed to it.</strong> You accepted version{' '}
+            <span data-numeral>{profile?.disclosureVersion}</span>; what follows is version{' '}
+            <span data-numeral>{DISCLOSURE_VERSION}</span>. Read it again before continuing —
+            consent to a different text is not consent to this one.
           </p>
-        </section>
+        ) : null}
 
-        <section className="flex flex-col gap-2">
-          <h2 className="text-xs font-semibold tracking-[0.14em] text-text-primary uppercase">
-            What the other men see
-          </h2>
-          <p>
-            Whether you filed, whether your day held, your weekly commitments and whether you hit
-            them. <strong className="text-text-primary">Not</strong> which specific protocol you
-            failed. The sensitive ones count toward your day&rsquo;s status and are never itemised
-            to your peers.
-          </p>
-        </section>
-
-        <section className="flex flex-col gap-2">
-          <h2 className="text-xs font-semibold tracking-[0.14em] text-text-primary uppercase">
-            What nobody outside sees
-          </h2>
-          <p>
-            No analytics service, error reporter or log aggregator ever receives protocol detail.
-            Your data is exportable and deletable on request, and deletion means deletion.
-          </p>
-        </section>
-
-        <p className="text-text-muted">
-          This only works if what you record is true. If you would rather not have the mentor see a
-          particular protocol itemised, say so to him directly — do not solve it by filing a
-          report that is not accurate.
-        </p>
+        <DisclosureBody />
 
         <label className="flex items-start gap-3 rounded-[var(--radius-md)] border border-border-strong bg-surface-base p-3">
           <input

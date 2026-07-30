@@ -62,6 +62,26 @@ Verified by mutation: adding a table without RLS, a policy with `USING (true)`, 
 "I reviewed the policies" is not verification. A `USING (true)` left over from debugging
 looks exactly like a correct policy in a diff.
 
+That test reads the catalogue. `tests/db/every-table-every-verb.test.ts` reads the
+**outcome**, which is the §3.4 requirement stated literally: a fully legitimate member of
+another circle, holding a real session, is pointed at every table in `public` and must get
+zero of the other circle's rows from a SELECT, and affect zero rows with an UPDATE or a
+DELETE. `anon` must get zero rows from everything, including `app_meta`.
+
+The two are complementary rather than redundant. A catalogue check cannot tell a correct
+predicate from a subtly wrong one — both are just text in `pg_policies` — and an outcome
+check cannot tell a policy that is right from one that happens to match no rows today. The
+second is also the one that covers tables nobody remembered to write a test for: it
+enumerates from `pg_tables`, so a table added in a later phase is swept the moment it
+exists, and a fixture assertion fails if that table has no rows to prove isolation with.
+
+Verified by mutation: a `USING (true)` on `bottom_g_tactics` — the most sensitive table in
+the schema — fails it, naming the table.
+
+The other files in `tests/db` are the readable ones. They say what each policy is *for*: a
+peer sees effort but not amounts, the mentor sees exactly what the disclosure says he sees.
+Those state intent; this one states completeness.
+
 ---
 
 ## 2. This data is genuinely sensitive
@@ -111,10 +131,16 @@ build requirement rather than a policy note:
 | Requirement | Where |
 |---|---|
 | Enrollment shows, in plain words, exactly what the mentor will see — before the member files anything | Phase 1, blocking step in the enrollment flow |
-| Acceptance is recorded with a timestamp and the doctrine version in force | Phase 1, `enrollments.disclosure_accepted_at` + `disclosure_version` |
-| A member can re-read the disclosure at any time without hunting for it | Phase 1, linked from his profile |
-| Re-consent when the disclosure text materially changes | Phase 2, on doctrine version bump |
-| The mentor's read access is enforced by RLS, not by hiding UI | Phase 2 |
+| Acceptance is recorded with a timestamp and the doctrine version in force | Done — `profiles.disclosure_accepted_at` + `profiles.disclosure_version`, written together and held by the `profiles_disclosure_complete` CHECK |
+| A member can re-read the disclosure at any time without hunting for it | Done — `src/app/DisclosurePanel.tsx`, on the Circle tab, rendering the same component as the blocking screen |
+| Re-consent when the disclosure text materially changes | Done — `resolveAuthView` returns `disclosure` whenever the accepted version is not the version in force |
+| The mentor's read access is enforced by RLS, not by hiding UI | Done — `tests/db/forge-rls.test.ts`, `debrief-rls.test.ts`, `ledger-rls.test.ts` |
+
+The last two rows were listed here for two phases before anything implemented them. The
+acceptance row named the wrong table, which matters more than a typo normally would: this is
+the record of consent to processing special-category data, and an auditor following that
+reference would have looked in a table that has no such column. Both are fixed; the version
+check now has a test that fails if it is removed.
 
 The failure mode this is built to prevent: **the mentor quietly having full detail while
 members assume the peer view applies to him too.** That is the one genuinely wrong version

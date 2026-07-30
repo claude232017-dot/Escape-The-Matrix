@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { PHASE, PHASE_LABEL } from '@/app/build-info';
 import { CampaignHeader } from '@/app/CampaignHeader';
+import { DisclosurePanel } from '@/app/DisclosurePanel';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { InvitePanel } from '@/features/circle/components/InvitePanel';
 import { ProfileScreen } from '@/features/profile/components/ProfileScreen';
@@ -139,6 +140,12 @@ export function SignedInShell() {
                 {/* isMentor is presentation only. What stops a member creating invitations is the
                     RLS policy requiring app.is_mentor(). */}
                 <InvitePanel circleId={profile.circleId} isMentor={profile.role === 'mentor'} />
+
+                {/* SECURITY.md §3: he can re-read what he agreed to, without asking anyone. */}
+                <DisclosurePanel
+                  acceptedAt={profile.disclosureAcceptedAt}
+                  acceptedVersion={profile.disclosureVersion}
+                />
 
                 <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border-subtle pt-5">
                   <p className="text-xs text-text-muted">

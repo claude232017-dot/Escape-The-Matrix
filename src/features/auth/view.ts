@@ -40,7 +40,14 @@ export interface AuthInputs {
   /** Null when signed out. */
   session: { userId: string } | null;
   /** Null when not loaded or absent. Distinguished from absent by `profileLoading`. */
-  profile: { disclosureAcceptedAt: string | null } | null;
+  profile: { disclosureAcceptedAt: string | null; disclosureVersion: string | null } | null;
+  /**
+   * The disclosure version currently in force — `DISCLOSURE_VERSION`.
+   *
+   * Passed in rather than imported so the re-consent rule can be tested across versions without
+   * the test having to agree with today's constant.
+   */
+  currentDisclosureVersion: string;
   /** True while the profile fetch is in flight. */
   profileLoading: boolean;
   /** True before the auth library has reported initial session state. */
@@ -62,6 +69,17 @@ export function resolveAuthView(inputs: AuthInputs): AuthView {
   // The disclosure is what makes the mentor's access to special-category data legitimate,
   // so it blocks rather than nags. See ADR-009.
   if (inputs.profile.disclosureAcceptedAt === null) return 'disclosure';
+
+  // And consent to one text is not consent to a different one. When the disclosure changes —
+  // a new sensitive protocol, a change to who can read what — an acceptance recorded against
+  // the old version stops counting and he is asked again. SECURITY.md §3 requires this; without
+  // it, the version column records what he agreed to and then nothing ever reads it, which is
+  // the shape of a control that exists only in a document.
+  //
+  // Any difference re-asks, including an unrecognised or older-than-expected string. There is no
+  // ordering on these versions and inventing one would mean guessing which changes were
+  // material — the safe direction is to ask again.
+  if (inputs.profile.disclosureVersion !== inputs.currentDisclosureVersion) return 'disclosure';
 
   return 'app';
 }

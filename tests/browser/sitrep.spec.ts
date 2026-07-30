@@ -96,6 +96,71 @@ test.describe('the SITREP screen', () => {
     expect(payload?.results).toHaveLength(PROTOCOLS_ON_DAY_22);
   });
 
+  test('groups the day into duties and prohibitions', async ({ page }) => {
+    // Ungrouped, eleven protocols read as eleven unrelated items in an arbitrary order — the
+    // per-row "duty" tag that used to carry this was doing a section header's job eleven times.
+    await openHarness(page);
+    await expect(page.getByRole('heading', { name: /Duties/ })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Prohibitions/ })).toBeVisible();
+
+    const kinds = await page
+      .locator('[data-protocol]')
+      .evaluateAll((elements) =>
+        elements.map((element) =>
+          element.querySelector('[role="radio"]:last-child')?.textContent?.trim() ?? '',
+        ),
+      );
+    // Every duty precedes every prohibition: "Missed" is a duty's fail, "Broke it" a prohibition's.
+    const firstProhibition = kinds.indexOf('Broke it');
+    expect(firstProhibition).toBeGreaterThan(0);
+    expect(kinds.slice(firstProhibition).every((label) => label === 'Broke it')).toBe(true);
+  });
+
+  test('keeps the file control reachable without scrolling to the end', async ({ page }) => {
+    // On a phone the list is more than twice the height of the screen. A submit button you have
+    // to scroll to find is a submit button that gets found late, so the action bar is pinned to
+    // the viewport and carries the day count and the progress with it.
+    //
+    // Measured from the box rather than with toBeInViewport(), which reports a ratio of zero for
+    // this element — the pinned bar sets a backdrop-filter, and that creates a containing block
+    // the intersection check does not resolve the way the rendered geometry does.
+    await page.setViewportSize(PHONE);
+    await openHarness(page);
+    await expect(page.getByTestId('sitrep-progress')).toHaveText(/0 of 11 answered/);
+
+    const onScreen = async () =>
+      page.getByTestId('file-sitrep').evaluate((element) => {
+        const box = element.getBoundingClientRect();
+        return box.top >= 0 && box.bottom <= window.innerHeight && box.height > 0;
+      });
+
+    expect(await onScreen(), 'the file control is off screen on arrival').toBe(true);
+
+    // Pinned for the length of the protocol list, which is its scope: past the end of the SITREP
+    // he is in the debrief, and a file-the-day button hovering over a different form would be
+    // pointing at the wrong task.
+    await page.mouse.wheel(0, 1200);
+    await page.waitForTimeout(150);
+    expect(await onScreen(), 'the file control scrolled away mid-list').toBe(true);
+  });
+
+  test('folds the artefacts on every row but the one he is about to answer', async ({ page }) => {
+    // The rule that took the screen from 3,900px to something scannable. It has to move as he
+    // fills the day in, or it is just "the first row is special".
+    await openHarness(page);
+    const code = 'I do not negotiate with the version of me that wants to quit.';
+    await expect(row(page, 'morning-protocol').getByText(code)).toBeVisible();
+    await expect(row(page, 'deep-work').getByText('Phone in another room', { exact: false })).toBeHidden();
+
+    // Answer the rows above Deep Work and the reveal follows him down.
+    for (const slug of ['morning-protocol', 'daily-sitrep', 'physical-forging']) {
+      await row(page, slug).getByRole('radio').first().click();
+    }
+    await expect(
+      row(page, 'deep-work').getByText('Phone in another room', { exact: false }),
+    ).toBeVisible();
+  });
+
   test('offers only the protocols that are live on the day', async ({ page }) => {
     // Activation schedule, DOCTRINE §2.0. A protocol below its activation day cannot be failed and
     // must not be shown — offering one would judge a man against a rule that is not live.
@@ -112,23 +177,31 @@ test.describe('the SITREP screen', () => {
 
   test('shows the MED at the control, with his own Top G Code in it', async ({ page }) => {
     // The moment he reads the MED is the moment he is deciding whether to write the day off, so it
-    // is next to the pass/fail control rather than behind a disclosure. And the Morning Protocol
-    // MED says "read the Top G Code aloud" — printing that without the Code is friction at exactly
-    // the wrong moment.
+    // sits with the pass/fail control rather than behind a disclosure. The Morning Protocol MED
+    // says "read the Top G Code aloud" — printing that without the Code is friction at exactly the
+    // wrong moment.
     await page.setViewportSize(PHONE);
     await openHarness(page);
 
     const morning = row(page, 'morning-protocol');
-    await expect(morning.getByText('Minimum effective dose', { exact: false })).toBeVisible();
+    // Scoped to the paragraph: 'MED' is deliberately both the label on the text and the label
+    // on the control, which is the point — the words and the button he taps say the same thing.
+    await expect(morning.getByRole('paragraph').filter({ hasText: 'MED' })).toBeVisible();
     await expect(morning.getByText('read the Top G Code aloud', { exact: false })).toBeVisible();
-    await expect(morning.getByText('Your Top G Code')).toBeVisible();
+
+    // Already open, unprompted, because this is the first unanswered row — the one he is about to
+    // answer. The ten below it keep their artefacts folded, which is what took the screen from
+    // 3,900px to something a man can scan.
     await expect(
       morning.getByText('I do not negotiate with the version of me that wants to quit.'),
     ).toBeVisible();
 
-    // Deep Work's MED names the Fortress Protocol, so that is what its row shows.
+    // Deep Work's MED names the Fortress Protocol, so that is what its row offers — folded, one
+    // tap away, and never the Top G Code, which its MED does not mention.
     const deepWork = row(page, 'deep-work');
-    await expect(deepWork.getByText('Your Fortress Protocol')).toBeVisible();
+    await expect(deepWork.getByText('Phone in another room', { exact: false })).toBeHidden();
+    await deepWork.getByTestId('artefacts-toggle-deep-work').click();
+    await expect(deepWork.getByText('Phone in another room', { exact: false })).toBeVisible();
     await expect(deepWork.getByText('Your Top G Code')).toHaveCount(0);
   });
 
@@ -270,15 +343,19 @@ test.describe('the SITREP screen', () => {
 
   test('discloses which protocols the circle never sees itemised', async ({ page }) => {
     // §3.5. Sensitive protocols default to aggregate-only, and saying so where he answers is the
-    // difference between a policy and a disclosure.
+    // difference between a policy and a disclosure. Compressed from two lines of prose to a tag,
+    // because repeated verbatim on two rows it was boilerplate the eye learned to skip — but the
+    // full sentence stays reachable, which is what the title assertion pins.
     await openHarness(page);
-    await expect(
-      row(page, 'sexual-discipline').getByText('never itemised', { exact: false }),
-    ).toBeVisible();
-    await expect(
-      row(page, 'alcohol-and-drugs').getByText('never itemised', { exact: false }),
-    ).toBeVisible();
-    await expect(row(page, 'video-games').getByText('never itemised', { exact: false })).toHaveCount(0);
+    for (const slug of ['sexual-discipline', 'alcohol-and-drugs']) {
+      const tag = row(page, slug).getByText('Status only');
+      await expect(tag).toBeVisible();
+      await expect(tag).toHaveAttribute(
+        'title',
+        /circle sees this only in your day's status, never itemised/i,
+      );
+    }
+    await expect(row(page, 'video-games').getByText('Status only')).toHaveCount(0);
   });
 
   test('will not file an incomplete day', async ({ page }) => {

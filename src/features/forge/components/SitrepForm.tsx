@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { activeProtocols, type DayEvaluation, type ProtocolStatus } from '@/features/forge/doctrine';
 import { unanswered, type ProtocolWithMed, type SitrepDraft } from '@/features/forge/sitrep-draft';
 import { ProtocolRow } from '@/features/forge/components/ProtocolRow';
@@ -17,6 +18,13 @@ import { Button } from '@/ui/Button';
  *  - It does not soften a reset. A reset is reported as a fact with its consequence stated, in the
  *    same register as a complete day. Framed as a verdict it becomes something to avoid filing,
  *    and an unfiled reset is a hole in the only dataset this product exists to build.
+ *
+ * Layout note. Protocols are grouped into duties and prohibitions under small headers, because
+ * ungrouped they read as eleven unrelated items in an arbitrary order — the per-row "duty" tag
+ * that used to carry this was doing a section header's job eleven times over. The action sits in
+ * a bar pinned to the bottom of the viewport rather than at the end of the list: on a phone the
+ * list is longer than the screen, and a submit button you have to scroll to find is a submit
+ * button that gets found late.
  */
 
 export type FileState = 'idle' | 'working' | 'sent' | 'held' | 'refused' | 'lost';
@@ -64,70 +72,98 @@ export function SitrepForm({
   const active = activeProtocols(protocols, day);
   const remaining = unanswered(draft, protocols, day);
   const complete = remaining.length === 0;
+  const duties = active.filter((protocol) => protocol.kind === 'duty');
+  const prohibitions = active.filter((protocol) => protocol.kind === 'prohibition');
+
+  // The row he is about to answer, which is the only one that opens its artefacts unprompted.
+  const nextUp = remaining[0]?.slug ?? null;
 
   return (
-    <section
-      aria-labelledby="sitrep-heading"
-      data-testid="sitrep"
-      data-day={day}
-      className="rounded-[var(--radius-lg)] border border-border-subtle bg-surface-raised p-4 sm:p-6"
-    >
-      <header className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <h2 id="sitrep-heading" className="text-xs font-semibold tracking-[0.18em] text-text-muted uppercase">
+    <section aria-labelledby="sitrep-heading" data-testid="sitrep" data-day={day}>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <h2 id="sitrep-heading" className="text-sm font-semibold text-text-primary">
           Today&apos;s SITREP
         </h2>
         <p className="text-xs text-text-muted">
           <span data-numeral>{localDate}</span>
+          {alreadyFiled ? ' · already filed, answering again replaces it' : ''}
         </p>
-      </header>
+      </div>
 
-      <p className="mt-2 text-2xl">
-        <span data-numeral className="text-accent">
-          Day {day}
-        </span>{' '}
-        <span data-numeral className="text-text-muted">
-          / {campaignLengthDays}
-        </span>
-      </p>
+      <div className="mt-4 overflow-hidden rounded-[var(--radius-lg)] border border-border-subtle bg-surface-raised">
+        <Group title="Duties" hint="Things that must be done">
+          {duties.map((protocol) => (
+            <ProtocolRow
+              key={protocol.slug}
+              protocol={protocol}
+              entry={draft[protocol.slug]}
+              artefacts={artefacts}
+              revealArtefacts={protocol.slug === nextUp}
+              onStatus={onStatus}
+              onMedOption={onMedOption}
+            />
+          ))}
+        </Group>
 
-      {alreadyFiled ? (
-        <p className="mt-2 text-xs text-text-muted">
-          Already filed today. Answering again replaces it.
-        </p>
-      ) : null}
-
-      <ol className="mt-5 flex flex-col gap-3">
-        {active.map((protocol) => (
-          <ProtocolRow
-            key={protocol.slug}
-            protocol={protocol}
-            entry={draft[protocol.slug]}
-            artefacts={artefacts}
-            onStatus={onStatus}
-            onMedOption={onMedOption}
-          />
-        ))}
-      </ol>
+        {prohibitions.length > 0 ? (
+          <Group title="Prohibitions" hint="Things that must not be done">
+            {prohibitions.map((protocol) => (
+              <ProtocolRow
+                key={protocol.slug}
+                protocol={protocol}
+                entry={draft[protocol.slug]}
+                artefacts={artefacts}
+                revealArtefacts={protocol.slug === nextUp}
+                onStatus={onStatus}
+                onMedOption={onMedOption}
+              />
+            ))}
+          </Group>
+        ) : null}
+      </div>
 
       <Verdict evaluation={evaluation} remaining={remaining.length} localDate={localDate} />
 
-      <div className="mt-5 flex flex-col gap-3">
-        <Button
-          onClick={onFile}
-          disabled={!complete || fileState === 'working'}
-          data-testid="file-sitrep"
-          className="w-full"
-        >
-          {fileState === 'working' ? 'Filing…' : alreadyFiled ? 'Refile the day' : 'File the day'}
-        </Button>
+      {/* Pinned so the day can be filed from wherever he has scrolled to. `sticky bottom-0`
+          rather than `fixed`, so it never covers the last row and needs no spacer. */}
+      <div className="sticky bottom-0 z-10 -mx-4 mt-4 border-t border-border-subtle bg-surface-void px-4 py-3 sm:-mx-6 sm:px-6">
+        <div className="flex items-center gap-3">
+          <p className="min-w-0 flex-1 text-xs leading-tight text-text-muted">
+            <span data-numeral className="text-sm font-semibold text-accent">
+              Day {day}
+            </span>
+            <span data-numeral className="text-text-muted">
+              {' '}
+              / {campaignLengthDays}
+            </span>
+            <br />
+            <span data-testid="sitrep-progress">
+              {complete ? (
+                'Ready to file.'
+              ) : (
+                <>
+                  <span data-numeral>{active.length - remaining.length}</span> of{' '}
+                  <span data-numeral>{active.length}</span> answered
+                </>
+              )}
+            </span>
+          </p>
+          <Button
+            onClick={onFile}
+            disabled={!complete || fileState === 'working'}
+            data-testid="file-sitrep"
+          >
+            {fileState === 'working' ? 'Filing…' : alreadyFiled ? 'Refile' : 'File the day'}
+          </Button>
+        </div>
 
-        {/* The honest report, from @/features/forge/use-outbox describeQueue(). "Held on this
-            device" is true and useful; a tick would be a lie, and a man who believes his SITREP
-            is filed does not file it again. */}
+        {/* The honest report, from describeQueue(). "Held on this device" is true and useful; a
+            tick would be a lie, and a man who believes his SITREP is filed does not file it
+            again. */}
         <p
           data-testid="queue-status"
           role="status"
-          className={`text-xs leading-relaxed ${
+          className={`mt-1.5 text-xs leading-relaxed ${
             fileState === 'sent'
               ? 'text-status-pass'
               : fileState === 'refused' || fileState === 'lost'
@@ -139,12 +175,34 @@ export function SitrepForm({
         </p>
 
         {refusal ? (
-          <p role="alert" className="text-xs leading-relaxed text-status-fail">
+          <p role="alert" className="mt-1 text-xs leading-relaxed text-status-fail">
             {refusal}
           </p>
         ) : null}
       </div>
     </section>
+  );
+}
+
+function Group({
+  title,
+  hint,
+  children,
+}: {
+  title: string;
+  hint: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="border-b border-border-subtle last:border-b-0">
+      <h3 className="flex items-baseline gap-2 bg-surface-base px-4 py-2 sm:px-5">
+        <span className="text-xs font-semibold tracking-[0.16em] text-text-secondary uppercase">
+          {title}
+        </span>
+        <span className="text-xs text-text-muted">{hint}</span>
+      </h3>
+      <ul className="divide-y divide-border-subtle">{children}</ul>
+    </div>
   );
 }
 
@@ -165,13 +223,10 @@ function Verdict({
   localDate: string;
 }) {
   if (evaluation.kind === 'incomplete') {
+    // Deliberately silent while the day is unfinished. The count lives in the action bar, and
+    // repeating it here as a second running total was noise competing with the protocols.
     return (
-      <p
-        data-testid="verdict"
-        data-outcome="incomplete"
-        aria-live="polite"
-        className="mt-4 text-sm text-text-secondary"
-      >
+      <p data-testid="verdict" data-outcome="incomplete" aria-live="polite" className="sr-only">
         <span data-numeral>{remaining}</span>{' '}
         {remaining === 1 ? 'protocol still needs an answer.' : 'protocols still need an answer.'}
       </p>
@@ -179,13 +234,19 @@ function Verdict({
   }
 
   const { outcome, failed, medPassed, resetKind } = evaluation;
+  const accent =
+    outcome === 'complete'
+      ? 'border-status-pass/40'
+      : outcome === 'repeat'
+        ? 'border-status-fail/40'
+        : 'border-status-treason/40';
 
   return (
     <div
       data-testid="verdict"
       data-outcome={outcome}
       aria-live="polite"
-      className="mt-4 rounded-[var(--radius-md)] border border-border-subtle bg-surface-sunken p-4"
+      className={`mt-4 rounded-[var(--radius-md)] border-l-2 bg-surface-raised px-4 py-3 ${accent}`}
     >
       {outcome === 'complete' ? (
         <>

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { campaignDay, getLocalDateString } from '@/lib/date';
 import { readScoped, writeScoped, type StorageLike } from '@/lib/local-state';
 import type { OutboxEntry } from '@/lib/outbox';
-import { activeProtocols, type ProtocolStatus } from '@/features/forge/doctrine';
+import { activeProtocols, currentStreak, type ProtocolStatus } from '@/features/forge/doctrine';
 import { getSupabase } from '@/lib/supabase';
 import {
   draftKey,
@@ -11,6 +11,7 @@ import {
   setMedOption,
   setStatus,
   toPayload,
+  unanswered,
   type ProtocolWithMed,
   type SitrepDraft,
   type SitrepPayload,
@@ -34,18 +35,36 @@ import { AttackPatternPanel } from '@/features/forge/components/AttackPatternPan
 import { Button } from '@/ui/Button';
 
 /**
- * The SITREP, wired to the database.
+ * The Forge, wired to the database.
  *
- * All the presentation is in SitrepForm, which takes only values — that separation is what lets
- * the sixty-second gate be measured in a real browser with no credentials. This file is the part
- * that cannot be: which campaign, which enrollment, what has already been filed today.
+ * All the presentation is in SitrepForm, DebriefForm and AttackPatternPanel, which take only
+ * values — that separation is what lets the sixty-second gate be measured in a real browser with
+ * no credentials. This file is the part that cannot be: which campaign, which enrollment, what
+ * has already been filed today.
+ *
+ * Renders one of two views from the same loaded data. `today` is what has to happen before
+ * midnight; `intel` is what the record now says. They share a component because they share a
+ * query — mounting two screens that each load the campaign would double every read for a man who
+ * switches tabs.
  *
  * Takes the profile as **props** rather than reading the auth context, so the Forge does not
  * import the auth feature. The composition root wires them; the import-graph test rejects
  * cross-feature imports.
  */
 
-export interface SitrepScreenProps {
+/** What the shell needs to render the campaign header and the Today badge. */
+export interface ForgeView {
+  day: number;
+  lengthDays: number;
+  campaignName: string;
+  streak: number;
+  filedToday: boolean;
+  /** Active protocols still unanswered today. Zero once the day is filed. */
+  outstanding: number;
+}
+
+export interface ForgeScreenProps {
+  view: 'today' | 'intel';
   profileId: string;
   timezone: string;
   artefacts: {
@@ -53,6 +72,8 @@ export interface SitrepScreenProps {
     commandPostNote: string | null;
     fortressProtocol: string | null;
   };
+  /** Lifted so the header can show the day without loading the campaign a second time. */
+  onState?: (view: ForgeView) => void;
 }
 
 interface Campaign {
@@ -79,6 +100,8 @@ interface Loaded {
   filedDebrief: { draft: DebriefDraft; triggerKind: TriggerKind | null } | null;
   /** Every attack he has logged, for the pattern readback. */
   attacks: AttackRecord[];
+  /** This enrollment's filed days, newest first, for the streak. */
+  outcomes: { localDate: string; finalStatus: 'complete' | 'repeat' | 'reset' }[];
 }
 
 interface MedOptionRow {
@@ -114,7 +137,7 @@ function draftStorageName(enrollmentId: string, localDate: string): string {
   return `sitrep-draft-${enrollmentId}-${localDate}`;
 }
 
-export function SitrepScreen({ profileId, timezone, artefacts }: SitrepScreenProps) {
+export function ForgeScreen({ view, profileId, timezone, artefacts, onState }: ForgeScreenProps) {
   // Today, in his timezone. Never from toISOString() — see src/lib/date.ts. Recomputed on each
   // load rather than memoised for the session, because a tab left open overnight must roll over.
   const today = useMemo(() => getLocalDateString(timezone), [timezone]);
@@ -205,6 +228,7 @@ export function SitrepScreen({ profileId, timezone, artefacts }: SitrepScreenPro
         sitrepId: null,
         filedDebrief: null,
         attacks: [],
+        outcomes: [],
       };
     }
 
@@ -316,7 +340,20 @@ export function SitrepScreen({ profileId, timezone, artefacts }: SitrepScreenPro
       ];
     });
 
-    return { campaign, enrollment, protocols, filed, sitrepId, filedDebrief, attacks };
+    const { data: outcomeHistory } = await supabase
+      .from('sitreps')
+      .select('local_date, final_status')
+      .eq('enrollment_id', enrollment.id)
+      .order('local_date', { ascending: false });
+
+    const outcomes = ((outcomeHistory ?? []) as { local_date: string; final_status: string }[]).map(
+      (row) => ({
+        localDate: row.local_date,
+        finalStatus: row.final_status as 'complete' | 'repeat' | 'reset',
+      }),
+    );
+
+    return { campaign, enrollment, protocols, filed, sitrepId, filedDebrief, attacks, outcomes };
   }, [profileId, today]);
 
   useEffect(() => {
@@ -501,6 +538,27 @@ export function SitrepScreen({ profileId, timezone, artefacts }: SitrepScreenPro
     }
   }, [debrief, loaded?.sitrepId, outbox, triggerKind]);
 
+  // Lifted to the shell so the campaign header can render the day without a second query. In an
+  // effect rather than during render: calling a parent's setState mid-render is the cascading
+  // update React warns about, and the header is one frame behind for exactly one frame.
+  const streak = useMemo(() => {
+    if (!loaded?.enrollment) return 0;
+    const byDate = new Map(loaded.outcomes.map((row) => [row.localDate, row.finalStatus]));
+    return currentStreak(byDate, today, loaded.enrollment.startedOn);
+  }, [loaded, today]);
+
+  useEffect(() => {
+    if (!onState || !loaded?.enrollment) return;
+    onState({
+      day,
+      lengthDays: loaded.campaign.lengthDays,
+      campaignName: loaded.campaign.name,
+      streak,
+      filedToday: loaded.filed !== null,
+      outstanding: unanswered(draft, loaded.protocols, day).length,
+    });
+  }, [onState, loaded, day, streak, draft]);
+
   const onJoin = useCallback(async () => {
     if (!loaded?.campaign) return;
     setJoining(true);
@@ -533,6 +591,23 @@ export function SitrepScreen({ profileId, timezone, artefacts }: SitrepScreenPro
     );
   }
 
+  if (view === 'intel') {
+    return (
+      <div className="flex flex-col gap-6">
+        <AttackPatternPanel attacks={loaded.attacks} />
+        {loaded.attacks.length === 0 ? (
+          <Panel>
+            <h2 className="text-sm font-semibold text-text-primary">Nothing to report yet</h2>
+            <p className="mt-2 max-w-prose text-sm leading-relaxed text-text-secondary">
+              Log a Bottom G attack in a debrief and this becomes a record of when he moves and
+              what works. It stays empty rather than showing an invented pattern.
+            </p>
+          </Panel>
+        ) : null}
+      </div>
+    );
+  }
+
   if (!loaded.enrollment) {
     return (
       <Panel>
@@ -552,7 +627,7 @@ export function SitrepScreen({ profileId, timezone, artefacts }: SitrepScreenPro
     <div className="flex flex-col gap-6">
       <SitrepForm
         day={day}
-      localDate={today}
+        localDate={today}
         campaignLengthDays={loaded.campaign.lengthDays}
         protocols={loaded.protocols}
         draft={draft}
@@ -607,7 +682,6 @@ export function SitrepScreen({ profileId, timezone, artefacts }: SitrepScreenPro
         </section>
       )}
 
-      <AttackPatternPanel attacks={loaded.attacks} />
     </div>
   );
 }

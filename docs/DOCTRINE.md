@@ -155,11 +155,16 @@ survivable. It is encoded exactly as stated:
   has two, offers four: done, Option A, Option B, missed. Presenting the MED as something you
   reach only after admitting you failed would invert the mechanic; it is meant to be the obvious
   move on a bad day, not a confession.
-- Where a MED names one of the member's own artefacts, **the artefact is rendered beside it**.
-  The Morning Protocol MED says "read the Top G Code aloud", so his Top G Code is on the screen;
-  Deep Work names the Fortress Protocol, so his is. Printing an instruction to consult something
-  and then not showing it is friction at exactly the wrong moment — the low-energy morning the
-  MED exists to rescue.
+- Where a MED names one of the member's own artefacts, **the artefact is offered beside it**.
+  The Morning Protocol MED says "read the Top G Code aloud", so his Top G Code is there; Deep Work
+  names the Fortress Protocol, so his is. Printing an instruction to consult something and then
+  not showing it is friction at exactly the wrong moment — the low-energy morning the MED exists
+  to rescue.
+  - **Open unprompted on the protocol he is about to answer, one tap away on the rest.** Changed
+    2026-07-30 from always-inline, after measuring the screen: eleven protocols with every
+    artefact expanded was 3,900 pixels on a phone, and a wall of text is its own kind of friction.
+    The reveal follows him down the list as he answers, so the row in front of him is always the
+    one showing its Code.
 - Filing a full day, every protocol live, is measured at **under sixty seconds one-handed at
   360px** — one tap per protocol and one to file, in `tests/browser/sitrep.spec.ts`. That budget
   is what decides the shape of the control; it is a gate, not an aspiration.

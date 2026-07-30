@@ -248,8 +248,8 @@ export function SitrepHarness() {
   }, [debrief, triggerKind]);
 
   return (
-    <div className="min-h-dvh bg-surface-void px-4 py-6" data-harness={HARNESS_MARKER}>
-      <main id="main" className="mx-auto w-full max-w-2xl">
+    <div className="min-h-dvh bg-surface-void" data-harness={HARNESS_MARKER}>
+      <main id="main" className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6">
         <SitrepForm
           day={day}
           localDate="2026-07-30"

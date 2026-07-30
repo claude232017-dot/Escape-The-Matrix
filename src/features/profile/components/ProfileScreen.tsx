@@ -49,7 +49,7 @@ export function ProfileScreen({
   profileId: string;
   initial: ProfileFields;
   onSaved: () => void | Promise<void>;
-  onClose: () => void;
+  onClose?: () => void;
 }) {
   const [displayName, setDisplayName] = useState(initial.displayName);
   const [timezone, setTimezone] = useState(initial.timezone);
@@ -138,9 +138,13 @@ export function ProfileScreen({
         >
           Your profile
         </h2>
-        <Button variant="quiet" onClick={onClose} disabled={busy}>
-          Close
-        </Button>
+        {/* Only rendered when there is somewhere to close to. In the Circle tab this panel is
+            the content, and a Close button that collapses a screen's only content is a dead end. */}
+        {onClose ? (
+          <Button variant="quiet" onClick={onClose} disabled={busy}>
+            Close
+          </Button>
+        ) : null}
       </div>
 
       <form onSubmit={onSubmit} className="mt-5 flex flex-col gap-5" noValidate>

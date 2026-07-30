@@ -133,6 +133,26 @@ select p.display_name, p.role, p.timezone, c.name as circle
   from public.profiles p join public.circles c on c.id = p.circle_id;
 ```
 
+### Opening a campaign
+
+Until a campaign exists, the SITREP screen has nothing to offer and says so. Run
+`supabase/bootstrap/02_first_campaign.sql` **after the mentor has signed in at least once** — it
+resolves the start date in his timezone, which it can only read from his profile.
+
+It creates the campaign and seeds the eleven protocols and five MED options. Safe to re-run:
+it reuses a campaign of the same name and re-seeds idempotently. It prints the catalogue at the
+end; **eleven protocols across five activation waves** is what DOCTRINE §2.0 says, and a
+different count means the seed function and the doctrine have diverged.
+
+It enrols nobody. Each man presses **Start Day 1** on his own screen, because Day 1 should be a
+decision he makes rather than a row that appeared while he was asleep. Joining late does not
+back-date him — `public.start_campaign_enrollment` starts him on the later of the campaign start
+and his own today.
+
+A campaign is a once-a-month decision by one person, which is why it is a script and not a
+screen. To run a second one, change `v_name` and `v_starts_on` and run it again; the first
+campaign's history stays readable under the ruleset it was actually run under.
+
 ## Deploying
 
 Hosted on Vercel. Framework preset Vite, build `npm run build`, output `dist`.

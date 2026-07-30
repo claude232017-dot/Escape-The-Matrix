@@ -5,6 +5,7 @@ import { useAuth } from '@/features/auth/AuthProvider';
 import { InvitePanel } from '@/features/circle/components/InvitePanel';
 import { ProfileScreen } from '@/features/profile/components/ProfileScreen';
 import { ForgeScreen, type ForgeView } from '@/features/forge/components/ForgeScreen';
+import { useForgeData } from '@/features/forge/use-forge-data';
 import { Button } from '@/ui/Button';
 import { TabPanel, Tabs } from '@/ui/Tabs';
 
@@ -25,6 +26,11 @@ export function SignedInShell() {
   const { profile, signOut, refreshProfile, busy } = useAuth();
   const [tab, setTab] = useState('today');
   const [forge, setForge] = useState<ForgeView | null>(null);
+
+  // Loaded once, here, and handed to both tabs. Radix unmounts an inactive panel, so a screen
+  // that loaded its own data re-ran the whole query chain on every switch between Today and
+  // Intel — nine round trips per tap. The data belongs to the session, not to a panel.
+  const data = useForgeData(profile?.id ?? '', profile?.timezone ?? 'UTC');
 
   if (!profile) return null; // Unreachable: AuthGate only renders this in the 'app' view.
 
@@ -82,6 +88,7 @@ export function SignedInShell() {
 
               <ForgeScreen
                 view="today"
+                data={data}
                 profileId={profile.id}
                 timezone={profile.timezone}
                 artefacts={{
@@ -96,6 +103,7 @@ export function SignedInShell() {
             <TabPanel value="intel">
               <ForgeScreen
                 view="intel"
+                data={data}
                 profileId={profile.id}
                 timezone={profile.timezone}
                 artefacts={{

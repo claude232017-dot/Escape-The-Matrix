@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { campaignDay, getLocalDateString } from '@/lib/date';
+import { campaignDay } from '@/lib/date';
 import { readScoped, writeScoped, type StorageLike } from '@/lib/local-state';
 import type { OutboxEntry } from '@/lib/outbox';
 import { activeProtocols, currentStreak, type ProtocolStatus } from '@/features/forge/doctrine';
-import { getSupabase } from '@/lib/supabase';
 import {
   draftKey,
   emptyDraft,
@@ -25,13 +24,13 @@ import {
   emptyDebrief,
   localHour,
   toPayload as toDebriefPayload,
-  type AttackRecord,
   type DebriefDraft,
   type DebriefPayload,
   type TriggerKind,
 } from '@/features/forge/debrief-draft';
 import { debriefRefusalMessage, sendDebrief } from '@/features/forge/debrief-write';
 import { AttackPatternPanel } from '@/features/forge/components/AttackPatternPanel';
+import type { ForgeData, Loaded } from '@/features/forge/use-forge-data';
 import { Button } from '@/ui/Button';
 
 /**
@@ -65,6 +64,8 @@ export interface ForgeView {
 
 export interface ForgeScreenProps {
   view: 'today' | 'intel';
+  /** Loaded once by the shell — see @/features/forge/use-forge-data. */
+  data: ForgeData;
   profileId: string;
   timezone: string;
   artefacts: {
@@ -74,53 +75,6 @@ export interface ForgeScreenProps {
   };
   /** Lifted so the header can show the day without loading the campaign a second time. */
   onState?: (view: ForgeView) => void;
-}
-
-interface Campaign {
-  id: string;
-  name: string;
-  startsOn: string;
-  lengthDays: number;
-}
-
-interface Enrollment {
-  id: string;
-  startedOn: string;
-}
-
-interface Loaded {
-  campaign: Campaign;
-  enrollment: Enrollment | null;
-  protocols: ProtocolWithMed[];
-  /** Results already on the server for today, keyed by slug. */
-  filed: SitrepDraft | null;
-  /** Today's SITREP row. Null until the day is filed — a debrief hangs off a filed day. */
-  sitrepId: string | null;
-  /** The debrief already on the server for today, if any. */
-  filedDebrief: { draft: DebriefDraft; triggerKind: TriggerKind | null } | null;
-  /** Every attack he has logged, for the pattern readback. */
-  attacks: AttackRecord[];
-  /** This enrollment's filed days, newest first, for the streak. */
-  outcomes: { localDate: string; finalStatus: 'complete' | 'repeat' | 'reset' }[];
-}
-
-interface MedOptionRow {
-  id: string;
-  label: string;
-  body: string;
-  sort_order: number;
-}
-
-interface ProtocolRowData {
-  id: string;
-  slug: string;
-  label: string;
-  nickname: string | null;
-  kind: 'duty' | 'prohibition';
-  activates_on_day: number;
-  is_treason_trigger: boolean;
-  visibility: 'itemised' | 'aggregate_only';
-  protocol_med_options: MedOptionRow[] | null;
 }
 
 function storage(): StorageLike | null {
@@ -137,18 +91,11 @@ function draftStorageName(enrollmentId: string, localDate: string): string {
   return `sitrep-draft-${enrollmentId}-${localDate}`;
 }
 
-export function ForgeScreen({ view, profileId, timezone, artefacts, onState }: ForgeScreenProps) {
-  // Today, in his timezone. Never from toISOString() — see src/lib/date.ts. Recomputed on each
-  // load rather than memoised for the session, because a tab left open overnight must roll over.
-  const today = useMemo(() => getLocalDateString(timezone), [timezone]);
-
-  const [loaded, setLoaded] = useState<Loaded | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
+export function ForgeScreen({ view, data, profileId, timezone, artefacts, onState }: ForgeScreenProps) {
+  const { loaded, error: loadError, today, reload, joining, join } = data;
   const [draft, setDraft] = useState<SitrepDraft>(emptyDraft);
   const [fileState, setFileState] = useState<FileState>('idle');
   const [refusal, setRefusal] = useState<string | null>(null);
-  const [joining, setJoining] = useState(false);
-  const [reloadToken, setReloadToken] = useState(0);
 
   const [debrief, setDebrief] = useState<DebriefDraft>(emptyDebrief);
   const [triggerKind, setTriggerKind] = useState<TriggerKind | null>(null);
@@ -166,229 +113,30 @@ export function ForgeScreen({ view, profileId, timezone, artefacts, onState }: F
   }, []);
   const outbox = useOutbox(profileId, send);
 
-  const load = useCallback(async (): Promise<Loaded | null> => {
-    const supabase = getSupabase();
 
-    const { data: campaignRows, error: campaignError } = await supabase
-      .from('campaigns')
-      .select('id, name, starts_on, length_days')
-      .order('starts_on', { ascending: false })
-      .limit(1);
-    if (campaignError) throw new Error(campaignError.message);
-    const campaignRow = campaignRows?.[0];
-    if (!campaignRow) return null;
-
-    const campaign: Campaign = {
-      id: campaignRow.id as string,
-      name: campaignRow.name as string,
-      startsOn: campaignRow.starts_on as string,
-      lengthDays: campaignRow.length_days as number,
-    };
-
-    const { data: protocolRows, error: protocolError } = await supabase
-      .from('protocols')
-      .select(
-        'id, slug, label, nickname, kind, activates_on_day, is_treason_trigger, visibility, sort_order, protocol_med_options(id, label, body, sort_order)',
-      )
-      .eq('campaign_id', campaign.id)
-      .order('sort_order');
-    if (protocolError) throw new Error(protocolError.message);
-
-    const protocols: ProtocolWithMed[] = ((protocolRows ?? []) as unknown as ProtocolRowData[]).map(
-      (row) => ({
-        id: row.id,
-        slug: row.slug,
-        label: row.label,
-        nickname: row.nickname,
-        kind: row.kind,
-        activatesOnDay: row.activates_on_day,
-        isTreasonTrigger: row.is_treason_trigger,
-        visibility: row.visibility,
-        medOptions: [...(row.protocol_med_options ?? [])]
-          .sort((a, b) => a.sort_order - b.sort_order)
-          .map((option) => ({ id: option.id, label: option.label, body: option.body })),
-      }),
-    );
-
-    const { data: enrollmentRows, error: enrollmentError } = await supabase
-      .from('enrollments')
-      .select('id, started_on')
-      .eq('profile_id', profileId)
-      .eq('campaign_id', campaign.id)
-      .eq('status', 'active')
-      .limit(1);
-    if (enrollmentError) throw new Error(enrollmentError.message);
-    const enrollmentRow = enrollmentRows?.[0];
-    if (!enrollmentRow) {
-      return {
-        campaign,
-        enrollment: null,
-        protocols,
-        filed: null,
-        sitrepId: null,
-        filedDebrief: null,
-        attacks: [],
-        outcomes: [],
-      };
+  // Adopt whatever the shell loaded, during render rather than in an effect.
+  //
+  // React's documented way to reset state when a prop changes: compare against the last value
+  // adopted and set during render, which re-renders before anything is painted. The effect version
+  // paints once with the previous value and then corrects itself, which on a screen about what a
+  // man did today is one frame of the wrong answers.
+  //
+  // The server's version of today wins over a local draft: it is what actually happened, and a
+  // stale draft silently overwriting a filed day is the failure mode worth avoiding. A local draft
+  // is used only when nothing has been filed yet.
+  const [adopted, setAdopted] = useState<Loaded | null>(null);
+  if (loaded !== adopted) {
+    setAdopted(loaded);
+    if (loaded?.enrollment) {
+      const store = storage();
+      const local = store
+        ? readScoped<SitrepDraft>(store, profileId, draftStorageName(loaded.enrollment.id, today))
+        : null;
+      setDraft(loaded.filed ?? local ?? emptyDraft());
+      setDebrief(loaded.filedDebrief?.draft ?? emptyDebrief());
+      setTriggerKind(loaded.filedDebrief?.triggerKind ?? null);
     }
-
-    const enrollment: Enrollment = {
-      id: enrollmentRow.id as string,
-      startedOn: enrollmentRow.started_on as string,
-    };
-
-    const { data: sitrepRows, error: sitrepError } = await supabase
-      .from('sitreps')
-      .select('id, protocol_results(protocol_id, status, med_option_id)')
-      .eq('enrollment_id', enrollment.id)
-      .eq('local_date', today)
-      .limit(1);
-    if (sitrepError) throw new Error(sitrepError.message);
-
-    const bySlug = new Map(protocols.map((protocol) => [protocol.id, protocol.slug]));
-    const results = (sitrepRows?.[0]?.protocol_results ?? []) as unknown as {
-      protocol_id: string;
-      status: ProtocolStatus;
-      med_option_id: string | null;
-    }[];
-
-    const filed: SitrepDraft | null = sitrepRows?.[0]
-      ? Object.fromEntries(
-          results.flatMap((result) => {
-            const slug = bySlug.get(result.protocol_id);
-            return slug ? [[slug, { status: result.status, medOptionId: result.med_option_id }]] : [];
-          }),
-        )
-      : null;
-
-    const sitrepId = (sitrepRows?.[0]?.id as string | undefined) ?? null;
-
-    // The debrief for today, and every attack he has ever logged. Two queries rather than one
-    // join: the pattern spans enrollments on purpose — a reset returns his day count to 1, but it
-    // does not make him a different man, and the enemy's timetable does not restart with it.
-    let filedDebrief: Loaded['filedDebrief'] = null;
-    if (sitrepId) {
-      const { data: debriefRows, error: debriefError } = await supabase
-        .from('debriefs')
-        .select(
-          'system_used, victory, insight_protocol_id, attacked, outcome, bottom_g_tactics:bottom_g_tactics!inner(occurred_at_hour, trigger_kind, propaganda, protocol_id)',
-        )
-        .eq('sitrep_id', sitrepId)
-        .limit(1);
-      // A quiet day has no tactic row, so the inner join returns nothing. Fall back to the
-      // debrief alone rather than treating "no attack" as "no debrief".
-      const withTactic = debriefError ? null : (debriefRows?.[0] ?? null);
-      const row =
-        withTactic ??
-        (
-          await supabase
-            .from('debriefs')
-            .select('system_used, victory, insight_protocol_id, attacked, outcome')
-            .eq('sitrep_id', sitrepId)
-            .limit(1)
-        ).data?.[0] ??
-        null;
-
-      if (row) {
-        const record = row as Record<string, unknown>;
-        const tactic = (record['bottom_g_tactics'] as Record<string, unknown>[] | undefined)?.[0];
-        filedDebrief = {
-          draft: {
-            systemUsed: (record['system_used'] as string | null) ?? '',
-            victory: (record['victory'] as string | null) ?? '',
-            insightProtocolId: (record['insight_protocol_id'] as string | null) ?? null,
-            attacked: record['attacked'] as boolean,
-            outcome: (record['outcome'] as DebriefDraft['outcome']) ?? null,
-            occurredAtHour: (tactic?.['occurred_at_hour'] as number | undefined) ?? null,
-            propaganda: (tactic?.['propaganda'] as string | null) ?? '',
-            attackedProtocolId: (tactic?.['protocol_id'] as string | null) ?? null,
-          },
-          triggerKind: (tactic?.['trigger_kind'] as TriggerKind | undefined) ?? null,
-        };
-      }
-    }
-
-    const { data: attackRows } = await supabase
-      .from('bottom_g_tactics')
-      .select('occurred_at_hour, trigger_kind, sitreps!inner(id, enrollments!inner(profile_id))')
-      .eq('sitreps.enrollments.profile_id', profileId);
-
-    // The outcome lives on `debriefs`, so it is joined back through the sitrep rather than
-    // duplicated onto the tactic — one fact, one place.
-    const { data: outcomeRows } = await supabase
-      .from('debriefs')
-      .select('sitrep_id, outcome')
-      .not('outcome', 'is', null);
-    const outcomeBySitrep = new Map(
-      ((outcomeRows ?? []) as { sitrep_id: string; outcome: string }[]).map((row) => [
-        row.sitrep_id,
-        row.outcome,
-      ]),
-    );
-
-    const attacks: AttackRecord[] = ((attackRows ?? []) as unknown as {
-      occurred_at_hour: number;
-      trigger_kind: TriggerKind;
-      sitreps: { id: string } | null;
-    }[]).flatMap((row) => {
-      const outcome = row.sitreps ? outcomeBySitrep.get(row.sitreps.id) : undefined;
-      // An attack with no readable outcome is dropped rather than defaulted. Guessing 'lost'
-      // would inflate the very number this panel exists to report honestly.
-      if (outcome !== 'resisted' && outcome !== 'partial' && outcome !== 'lost') return [];
-      return [
-        { occurredAtHour: row.occurred_at_hour, triggerKind: row.trigger_kind, outcome },
-      ];
-    });
-
-    const { data: outcomeHistory } = await supabase
-      .from('sitreps')
-      .select('local_date, final_status')
-      .eq('enrollment_id', enrollment.id)
-      .order('local_date', { ascending: false });
-
-    const outcomes = ((outcomeHistory ?? []) as { local_date: string; final_status: string }[]).map(
-      (row) => ({
-        localDate: row.local_date,
-        finalStatus: row.final_status as 'complete' | 'repeat' | 'reset',
-      }),
-    );
-
-    return { campaign, enrollment, protocols, filed, sitrepId, filedDebrief, attacks, outcomes };
-  }, [profileId, today]);
-
-  useEffect(() => {
-    let cancelled = false;
-    // State is set only from the promise callbacks, never synchronously in the effect body. A
-    // stale error is cleared by whatever triggered the reload — onJoin and onFile both do — which
-    // is also where clearing it belongs.
-    load()
-      .then((result) => {
-        if (cancelled) return;
-        setLoaded(result);
-        if (!result?.enrollment) return;
-
-        // The server's version of today wins over a local draft: it is what actually happened, and
-        // a stale draft silently overwriting a filed day is the failure mode worth avoiding. A
-        // local draft is only used when nothing has been filed yet.
-        const store = storage();
-        const local = store
-          ? readScoped<SitrepDraft>(
-              store,
-              profileId,
-              draftStorageName(result.enrollment.id, today),
-            )
-          : null;
-        setDraft(result.filed ?? local ?? emptyDraft());
-        setDebrief(result.filedDebrief?.draft ?? emptyDebrief());
-        setTriggerKind(result.filedDebrief?.triggerKind ?? null);
-      })
-      .catch((cause: unknown) => {
-        if (!cancelled) setLoadError(cause instanceof Error ? cause.message : 'Could not load the campaign.');
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [load, profileId, today, reloadToken]);
+  }
 
   const enrollmentId = loaded?.enrollment?.id ?? null;
 
@@ -466,7 +214,7 @@ export function ForgeScreen({ view, profileId, timezone, artefacts, onState }: F
         setFileState('sent');
         // Re-read rather than patch local state. A reset moved him to a new enrollment on the
         // server, and guessing at that here is how the screen and the database disagree.
-        setReloadToken((token) => token + 1);
+        reload();
       } else if (outcome.refused) {
         setFileState('refused');
         setRefusal(refusalMessage(outcome.failure?.message ?? 'Unknown reason'));
@@ -478,7 +226,7 @@ export function ForgeScreen({ view, profileId, timezone, artefacts, onState }: F
     } finally {
       filing.current = false;
     }
-  }, [day, draft, loaded, outbox, today]);
+  }, [day, draft, loaded, outbox, today, reload]);
 
   const onDebriefChange = useCallback((patch: Partial<DebriefDraft>) => {
     setDebrief((current) => {
@@ -524,7 +272,7 @@ export function ForgeScreen({ view, profileId, timezone, artefacts, onState }: F
       const outcome = await outbox.queue(debriefKey(sitrepId), payload);
       if (outcome.sent) {
         setDebriefState('sent');
-        setReloadToken((token) => token + 1);
+        reload();
       } else if (outcome.refused) {
         setDebriefState('refused');
         setDebriefRefusal(debriefRefusalMessage(outcome.failure?.message ?? 'Unknown reason'));
@@ -536,7 +284,7 @@ export function ForgeScreen({ view, profileId, timezone, artefacts, onState }: F
     } finally {
       filingDebrief.current = false;
     }
-  }, [debrief, loaded?.sitrepId, outbox, triggerKind]);
+  }, [debrief, loaded?.sitrepId, outbox, triggerKind, reload]);
 
   // Lifted to the shell so the campaign header can render the day without a second query. In an
   // effect rather than during render: calling a parent's setState mid-render is the cascading
@@ -558,18 +306,6 @@ export function ForgeScreen({ view, profileId, timezone, artefacts, onState }: F
       outstanding: unanswered(draft, loaded.protocols, day).length,
     });
   }, [onState, loaded, day, streak, draft]);
-
-  const onJoin = useCallback(async () => {
-    if (!loaded?.campaign) return;
-    setJoining(true);
-    setLoadError(null);
-    const { error } = await getSupabase().rpc('start_campaign_enrollment', {
-      p_campaign_id: loaded.campaign.id,
-    });
-    if (error) setLoadError(error.message);
-    else setReloadToken((token) => token + 1);
-    setJoining(false);
-  }, [loaded]);
 
   if (loadError) {
     return (
@@ -616,7 +352,7 @@ export function ForgeScreen({ view, profileId, timezone, artefacts, onState }: F
           You are not enrolled yet. Day 1 is the day you start — joining late does not backdate
           you, and the server decides the date, not this page.
         </p>
-        <Button className="mt-4" onClick={() => void onJoin()} disabled={joining}>
+        <Button className="mt-4" onClick={() => void join()} disabled={joining}>
           {joining ? 'Enrolling…' : 'Start Day 1'}
         </Button>
       </Panel>

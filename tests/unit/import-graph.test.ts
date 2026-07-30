@@ -172,6 +172,28 @@ describe('module graph', () => {
     ).toEqual([]);
   });
 
+  it('keeps screens rendered in more than one tab from owning their data', () => {
+    // The regression this exists to prevent, in full: Radix unmounts an inactive `Tabs.Content`,
+    // and ForgeScreen was mounted once under Today and once under Intel. Each instance loaded the
+    // campaign itself, so every switch between the two tabs tore one down, built the other, and
+    // re-ran nine sequential queries. It looked like a slow database and was a structural mistake.
+    //
+    // The invariant that fixes it: a screen mounted in more than one place does not fetch. Its
+    // data is loaded once by the shell and handed down. Asserted on the import graph because a
+    // reviewer cannot see "this component is mounted twice" from inside the component.
+    const noFetching = ['features/forge/components/ForgeScreen.tsx'];
+    const violations: string[] = [];
+    for (const file of noFetching) {
+      const targets = graph.get(join(SRC, file)) ?? [];
+      for (const target of targets) {
+        if (rel(target) === 'lib/supabase.ts') {
+          violations.push(`${file} loads its own data; lift it into a hook the shell calls once`);
+        }
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+
   it('keeps design tokens free of imports entirely', () => {
     // The palette is data. If it grows a dependency it can no longer be read by the
     // generator under plain Node, and the contrast test loses its single source.

@@ -4,6 +4,7 @@ import { sendSitrep } from '@/features/forge/sitrep-write';
 import { sendDebrief } from '@/features/forge/debrief-write';
 import { sendBusinessDay, sendMoneyEntry, sendVenture } from '@/features/ledger/ledger-write';
 import { loadWeek } from '@/features/week/use-week-data';
+import { loadCommand } from '@/features/command/use-command-data';
 import {
   sendCommitments,
   sendSettlement,
@@ -436,6 +437,68 @@ describeE2E('the app against a real PostgREST', () => {
 
       const after = await loadWeek(memberA.id, today);
       expect(after.current.commitments.map((c) => c.id)).not.toContain(target.id);
+    });
+  });
+
+  describe('the Commander’s View', () => {
+    it('reads both loops on one row through the view', async () => {
+      h.become(memberA);
+      const loaded = await loadCommand(memberA.id, today);
+      const day = loaded.mine.find((d) => d.localDate === today);
+
+      expect(day, 'the grain returned nothing for today').toBeDefined();
+      expect(day?.finalStatus).toBe('complete');
+      expect(day?.businessActions).toBe(6);
+      expect(day?.revenueMinor).toBe('130000');
+    });
+
+    it('keeps bigint revenue a string all the way through PostgREST', async () => {
+      // §3.2. A JS number loses pennies above 2^53, and the place that would happen silently is
+      // exactly here — the boundary where the wire format is JSON.
+      h.become(memberA);
+      const loaded = await loadCommand(memberA.id, today);
+      const day = loaded.mine.find((d) => d.localDate === today);
+      expect(typeof day?.revenueMinor).toBe('string');
+    });
+
+    it('blanks another man’s revenue for a peer, through the same query', async () => {
+      // The property the whole phase rests on, proved against a real server rather than against
+      // `pg`. A peer sees the day; he does not see a penny of it. If `member_days` ever loses
+      // `security_invoker`, this is the test that says so in the language of the bug.
+      h.become(peerA);
+      const loaded = await loadCommand(peerA.id, today);
+      const hisDay = loaded.circle.find(
+        (d) => d.profileId === memberA.id && d.localDate === today,
+      );
+
+      expect(hisDay, 'a peer could not see the day at all').toBeDefined();
+      expect(hisDay?.finalStatus).toBe('complete');
+      expect(hisDay?.revenueMinor, 'a peer read another man’s revenue').toBe('0');
+    });
+
+    it('shows the mentor the revenue, as disclosed', async () => {
+      h.become(mentorA);
+      const loaded = await loadCommand(mentorA.id, today);
+      const hisDay = loaded.circle.find(
+        (d) => d.profileId === memberA.id && d.localDate === today,
+      );
+      expect(hisDay?.revenueMinor).toBe('130000');
+    });
+
+    it('gives another circle nothing at all', async () => {
+      h.become(outsider);
+      const loaded = await loadCommand(outsider.id, today);
+      expect(loaded.circle).toEqual([]);
+      expect(loaded.mine).toEqual([]);
+    });
+
+    it('builds a standing per member the reader can see', async () => {
+      h.become(memberA);
+      const loaded = await loadCommand(memberA.id, today);
+      const mine = loaded.standings.find((s) => s.profileId === memberA.id);
+      expect(mine?.displayName).toBeTruthy();
+      expect(mine?.lastReported).toBe(today);
+      expect(mine?.daysSilent).toBe(0);
     });
   });
 

@@ -9,8 +9,10 @@ import { ForgeScreen, type ForgeView } from '@/features/forge/components/ForgeSc
 import { useForgeData } from '@/features/forge/use-forge-data';
 import { LedgerScreen } from '@/features/ledger/components/LedgerScreen';
 import { WeekScreen } from '@/features/week/components/WeekScreen';
+import { CommanderScreen } from '@/features/command/components/CommanderScreen';
 import { useLedgerData } from '@/features/ledger/use-ledger-data';
 import { useWeekData } from '@/features/week/use-week-data';
+import { useCommandData } from '@/features/command/use-command-data';
 import { Button } from '@/ui/Button';
 import { TabPanel, Tabs } from '@/ui/Tabs';
 
@@ -38,6 +40,7 @@ export function SignedInShell() {
   const data = useForgeData(profile?.id ?? '', profile?.timezone ?? 'UTC');
   const ledger = useLedgerData(profile?.id ?? '', profile?.timezone ?? 'UTC');
   const week = useWeekData(profile?.id ?? '', profile?.timezone ?? 'UTC');
+  const command = useCommandData(profile?.id ?? '', profile?.timezone ?? 'UTC');
 
   if (!profile) return null; // Unreachable: AuthGate only renders this in the 'app' view.
 
@@ -74,6 +77,7 @@ export function SignedInShell() {
               { value: 'ledger', label: 'Ledger' },
               { value: 'week', label: 'Week' },
               { value: 'intel', label: 'Intel' },
+              { value: 'command', label: 'Command' },
               { value: 'circle', label: 'Circle' },
             ]}
           >
@@ -129,6 +133,13 @@ export function SignedInShell() {
                   fortressProtocol: profile.fortressProtocol,
                 }}
               />
+            </TabPanel>
+
+            <TabPanel value="command">
+              {/* Every member sees this. What differs is what the *database* returns him:
+                  member_days is security_invoker, so a peer's rows arrive with the money
+                  already blanked. The tab is not a permission. */}
+              <CommanderScreen data={command} isMentor={profile.role === 'mentor'} />
             </TabPanel>
 
             <TabPanel value="circle">

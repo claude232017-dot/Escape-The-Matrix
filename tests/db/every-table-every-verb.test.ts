@@ -182,6 +182,12 @@ describeDb('every table, every verb', () => {
       [ventureA, memberA],
     );
 
+    await client.query(
+      `insert into public.commitments (profile_id, week_start, body, declared_on)
+       values ($1, app.week_start_for($1), 'Ten sales calls', app.today_for($1))`,
+      [memberA],
+    );
+
     const { rows } = await client.query<{ tablename: string }>(
       `select tablename from pg_tables where schemaname = 'public' order by tablename`,
     );

@@ -1,4 +1,5 @@
 import { Suspense, lazy } from 'react';
+import { Analytics } from '@vercel/analytics/react';
 import { Motion } from '@/app/Motion';
 import { ErrorBoundary } from '@/app/ErrorBoundary';
 import { AuthProvider } from '@/features/auth/AuthProvider';
@@ -112,6 +113,7 @@ export function App() {
             <Suspense fallback={<p className="p-4 text-sm text-text-muted">Loading harness…</p>}>
               <Harness />
             </Suspense>
+            <Analytics />
           </Motion>
         </ErrorBoundary>
       );
@@ -126,6 +128,7 @@ export function App() {
             <SignedInShell />
           </AuthGate>
         </AuthProvider>
+        <Analytics />
       </Motion>
     </ErrorBoundary>
   );

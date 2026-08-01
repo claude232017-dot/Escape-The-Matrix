@@ -109,8 +109,8 @@ row is attributable to a specific named man who knows the others.
 | Revenue and amounts | `money_entries` — **self and mentor only; peers get zero rows.** Effort is comparable because everyone controls it; revenue is not, and a column of amounts beside each other's names is a league table rather than a circle | Phase 4 |
 | Mentor access | A deliberate, stated choice the member sees **at enrollment**, never a silent default | Phase 2 — see §3 |
 | Third-party analytics / error reporting / log aggregation | **Never** receives protocol detail. Scrubbed at the boundary, and the scrubbing is tested by asserting on the outgoing payloads | Phase 9 |
-| Export | Includes everything the member owns, including the full war log | Phase 8 |
-| Deletion | Means deletion | Phase 8 |
+| Export | Includes everything the member owns, including the full war log | **Done** — `public.export_my_data()`, and `tests/db/export-deletion.test.ts` asserts `bottom_g_tactics` and the itemised protocol results are in it |
+| Deletion | Means deletion | **Done** — `public.delete_my_account()`. The test sweeps every table in `public` for any uuid column still naming him, enumerated from `pg_tables` |
 | Transport | HTTPS only | Ships with Vercel |
 | At rest | Postgres, encrypted at rest by Supabase | Ships with Supabase |
 
@@ -309,18 +309,25 @@ phase it was last checked against.
   wired up: the only egress today is `console.error` in the error boundary and the auth
   provider, which stays on the member's own device. The scrubbing and its test must land
   *with* the first reporter, not after it.
-- **Export and deletion are not built.** Phase 8. §2 promises both, and the promise is
-  currently kept by hand by the owner running SQL.
 - **GoTrue is not covered by an automated test.** `tests/api` drives real PostgREST, so
   every RLS policy and every read and write path is exercised against the real API. Signup,
   the two auth triggers, password recovery and §3.7's ordering are covered only by the
   browser suite against a harness, and by the bootstrap being run by hand.
+
+- **No offline shell before Phase 8.** Closed — `public/sw.js`. It caches the app shell only
+  and never a Supabase response: a cached protocol result would leave special-category data on
+  disk, unencrypted, surviving sign-out, somewhere `clearUserState` cannot reach.
 
 **Closed since Phase 0:**
 
 - ~~No auth.~~ Phase 1 — invite-only, enforced by a `BEFORE INSERT` trigger on
   `auth.users`, tested in `tests/db/identity-rls.test.ts`.
 - ~~No error boundaries.~~ Phase 1 — `src/app/ErrorBoundary.tsx`.
-- ~~The RLS matrix has one row.~~ It covers all seventeen tables in §4, and
+- ~~The RLS matrix has one row.~~ It covers every table in §4, and
   `tests/db/every-table-every-verb.test.ts` sweeps them from the catalogue rather than
   from a list somebody maintains.
+- ~~Export and deletion are not built.~~ Phase 8, above. Worth recording what deletion cost:
+  `playbooks.promoted_by` was written `ON DELETE RESTRICT` in Phase 7, which made **a mentor
+  who had ever promoted a playbook undeletable**. Nobody would have found that out until
+  somebody asked to be erased — the one conversation in which "the button does not work" is
+  not an acceptable answer. Fixed to `SET NULL` in 0012.

@@ -1,7 +1,16 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { PHASE, PHASE_LABEL } from '@/app/build-info';
 import { CampaignHeader } from '@/app/CampaignHeader';
 import { DisclosurePanel } from '@/app/DisclosurePanel';
+import { applyUpdate, onUpdateAvailable } from '@/app/service-worker';
+import { AccountPanel } from '@/features/account/components/AccountPanel';
+import {
+  accountRefusalMessage,
+  deleteAccount,
+  downloadExport,
+  exportFilename,
+  fetchExport,
+} from '@/features/account/account-write';
 import { useAuth } from '@/features/auth/auth-context';
 import { InvitePanel } from '@/features/circle/components/InvitePanel';
 import { ProfileScreen } from '@/features/profile/components/ProfileScreen';
@@ -32,9 +41,16 @@ import { TabPanel, Tabs } from '@/ui/Tabs';
  * him whether he had held his oath.
  */
 export function SignedInShell() {
-  const { profile, signOut, refreshProfile, busy } = useAuth();
+  const { profile, session, signOut, refreshProfile, busy } = useAuth();
   const [tab, setTab] = useState('today');
   const [forge, setForge] = useState<ForgeView | null>(null);
+  const [updateReady, setUpdateReady] = useState(false);
+  const [accountBusy, setAccountBusy] = useState(false);
+  const [accountRefusal, setAccountRefusal] = useState<string | null>(null);
+  const [exported, setExported] = useState<string | null>(null);
+
+  // §3.9: the worker never takes over on its own, so something has to notice it is waiting.
+  useEffect(() => onUpdateAvailable(setUpdateReady), []);
 
   // Loaded once, here, and handed to both tabs. Radix unmounts an inactive panel, so a screen
   // that loaded its own data re-ran the whole query chain on every switch between Today and
@@ -64,6 +80,21 @@ export function SignedInShell() {
           streak={forge?.streak ?? 0}
           filedToday={forge?.filedToday ?? false}
         />
+
+        {/* Offered, never imposed — §3.9. A man mid-SITREP decides when, not the worker. */}
+        {updateReady ? (
+          <div
+            data-testid="update-offer"
+            className="flex flex-wrap items-center justify-between gap-3 border-b border-border-subtle bg-surface-raised px-4 py-3"
+          >
+            <p className="text-sm text-text-secondary">
+              A new version is ready. It will be used next time you open the app.
+            </p>
+            <Button variant="secondary" onClick={applyUpdate}>
+              Reload now
+            </Button>
+          </div>
+        ) : null}
 
         <main id="main">
           <Tabs
@@ -181,6 +212,37 @@ export function SignedInShell() {
                 <DisclosurePanel
                   acceptedAt={profile.disclosureAcceptedAt}
                   acceptedVersion={profile.disclosureVersion}
+                />
+
+                <AccountPanel
+                  email={session?.user.email ?? ''}
+                  busy={accountBusy}
+                  refusal={accountRefusal}
+                  exportedFilename={exported}
+                  onExport={() => {
+                    setAccountBusy(true);
+                    setAccountRefusal(null);
+                    void fetchExport()
+                      .then((doc) => {
+                        const name = exportFilename(doc);
+                        downloadExport(doc, name);
+                        setExported(name);
+                      })
+                      .catch((cause: unknown) => setAccountRefusal(accountRefusalMessage(cause)))
+                      .finally(() => setAccountBusy(false));
+                  }}
+                  onDelete={(confirmEmail) => {
+                    setAccountBusy(true);
+                    setAccountRefusal(null);
+                    void deleteAccount(confirmEmail)
+                      // Signing out is what turns a deleted account into a signed-out browser.
+                      // Without it he sits on a dead session until something 401s.
+                      .then(() => signOut())
+                      .catch((cause: unknown) => {
+                        setAccountRefusal(accountRefusalMessage(cause));
+                        setAccountBusy(false);
+                      });
+                  }}
                 />
 
                 <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border-subtle pt-5">

@@ -139,8 +139,8 @@ React component
 
 ## Still to come
 
-Phase 8 export and PWA; Phase 9 hardening.
+Phase 9 hardening.
 
 Shipped: Phase 1 identity and invitations; Phase 2 the Forge and the durable outbox; Phase 3
 the debrief and the war log; Phase 4 the ledger; Phase 5 the weekly commitments; Phase 6 the
-Commander's View and the correlation engine; Phase 7 playbooks.
+Commander's View and the correlation engine; Phase 7 playbooks; Phase 8 export, deletion and the service worker.

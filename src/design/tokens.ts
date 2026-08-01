@@ -145,8 +145,13 @@ export const CONTRAST_PAIRS: readonly ContrastPair[] = [
 
 /** Non-colour tokens. Kept here so the generated stylesheet has one origin. */
 export const SCALE_TOKENS = {
+  // 'Inter Variable' is the family name the self-hosted @font-face declares — see
+  // src/styles/fonts.css, which is the only thing that makes this line true. It said 'Inter'
+  // for nine phases with nothing behind it, and every screen quietly rendered in the system
+  // face. If that file is ever removed, remove this entry with it rather than leaving the
+  // stack naming a font nobody ships.
   'font-sans':
-    "'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
+    "'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
   // Numerals are monospaced everywhere: campaign day, counts and money are meant to be
   // compared down a column, and proportional digits make that harder than it needs to be.
   'font-mono': "ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace",

@@ -24,6 +24,7 @@
     "url": "http://local_proxy@127.0.0.1:41729/git/claude232017-dot/Escape-The-Matrix"
   },
   "dependencies": {
+    "@fontsource-variable/inter": "^5.3.0",
     "@radix-ui/react-collapsible": "^1.1.20",
     "@radix-ui/react-dialog": "^1.1.23",
     "@radix-ui/react-dropdown-menu": "^2.1.24",

@@ -143,4 +143,24 @@ test.describe('the account panel holds up', () => {
     await page.getByRole('button', { name: 'Delete my account' }).click();
     expect(errors).toEqual([]);
   });
+
+  test('does not offer deletion at all when the session carries no address', async ({ page }) => {
+    // The regression. Supabase types `User.email` as `string | undefined` and the shell passes
+    // `?? ''`, so this is reachable. The old guard read
+    //
+    //     typed.trim().toLowerCase() !== email.toLowerCase()
+    //
+    // which with an empty address is `'' !== ''` — **false** — so "Erase everything" armed
+    // itself instantly with nothing typed, on the one control in this app that cannot be
+    // undone. The database still refused it, and the whole distance between a stray tap and
+    // destruction had silently gone to zero.
+    await open(page, '?noemail=1');
+
+    await expect(page.getByTestId('delete-unavailable')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Delete my account' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Erase everything' })).toHaveCount(0);
+
+    // Export is unaffected: it needs no address, and it is his data either way.
+    await expect(page.getByRole('button', { name: 'Export everything' })).toBeEnabled();
+  });
 });

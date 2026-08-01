@@ -1,0 +1,54 @@
+/**
+ * The one webfont, self-hosted.
+ *
+ * ---------------------------------------------------------------------------
+ * Why this file exists at all
+ * ---------------------------------------------------------------------------
+ * `SCALE_TOKENS['font-sans']` has named Inter since Phase 0 and nothing ever delivered it —
+ * no @font-face, no link tag, no package. Every screen has been rendering in whatever
+ * `ui-sans-serif` resolves to, which is a different face on macOS, Windows and Android. The
+ * token file was stating a fact that was not true, and the contrast suite measured colours
+ * against letterforms it had never seen.
+ *
+ * ---------------------------------------------------------------------------
+ * Self-hosted, and that is not an aesthetic preference
+ * ---------------------------------------------------------------------------
+ * The ordinary fix is two lines pointing at Google Fonts. §3.5 rules it out: a font request
+ * carries the member's IP address and a `Referer` naming this app to a third party, on every
+ * cold load, for every man in the circle. We scrub protocol detail at the egress boundary and
+ * then hand a tracker the visit for free — that is the same disclosure through a different
+ * door. The file ships from this origin or it does not ship.
+ *
+ * ---------------------------------------------------------------------------
+ * One file, one axis, one script
+ * ---------------------------------------------------------------------------
+ * The variable `wght` axis covers 100–900, so the whole type scale is 48 kB rather than one
+ * download per weight. Only the latin subset is referenced: the package also carries cyrillic,
+ * greek and vietnamese, and while `unicode-range` means a browser would never *fetch* those,
+ * importing the package's own stylesheet still emits all eight files into `dist`. Naming the
+ * one we use keeps the build honest about what it ships.
+ *
+ * ---------------------------------------------------------------------------
+ * `optional`, not `swap`
+ * ---------------------------------------------------------------------------
+ * `swap` paints the fallback and then reflows the whole page when the font lands — a jolt at
+ * exactly the moment somebody is reading. `optional` gives the font a short window and then
+ * commits to whatever it has, so a first cold load may render in the system face and **never**
+ * shifts. This is a tool a man opens every morning for thirty days: it is cached from the
+ * second visit onward, and the trade is one plain-looking first paint against zero layout
+ * shift for the rest of the campaign.
+ */
+
+@font-face {
+  font-family: 'Inter Variable';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: optional;
+  src: url('@fontsource-variable/inter/files/inter-latin-wght-normal.woff2')
+    format('woff2-variations');
+  /* Latin only. A glyph outside this range falls to the next family in the stack rather than
+     silently pulling nothing — see the stack in src/design/tokens.ts. */
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215,
+    U+FEFF, U+FFFD;
+}

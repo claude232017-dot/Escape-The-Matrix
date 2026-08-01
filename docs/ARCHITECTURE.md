@@ -124,6 +124,31 @@ declared usage fails the suite, so nothing reaches a screen unmeasured — and `
 cannot be used as an escape hatch, because the tokens allowed to carry it are themselves a
 declared list.
 
+The same file names the font stacks, and the same suite holds them to the same standard: a
+quoted, non-system family must have a matching `@font-face` in `src/styles/fonts.css`, which
+must load from this origin and must not block first paint. `'Inter'` sat in that stack from
+Phase 0 to Phase 9 with nothing anywhere loading it — see ADR-014.
+
+### The rain marks the door, and stays there
+
+`src/app/MatrixRain.tsx` is mounted on the threshold screens only — sign-in, reset, the
+disclosure. It is deliberately absent from every screen inside the app: the SITREP carries a
+filing gate the browser suite *measures* at sixty seconds, and moving glyphs behind that
+decision are interference rather than atmosphere.
+
+Confinement is enforced two ways, because one of them has a hole. `tests/browser/header.spec.ts`
+loads every harness route and asserts the canvas is absent — which covers each screen and
+misses the case that would actually happen, a single `<MatrixRain />` added to `SignedInShell`
+one level above them all, where no harness can reach. `tests/unit/rain-confinement.test.ts`
+reads the import graph and fails on any importer outside a declared allow-list, which catches
+it wherever it is mounted.
+
+Under `prefers-reduced-motion` the canvas paints a **still frame** rather than nothing: the
+usual reading throws the whole look away for people whose preference is about vestibular
+discomfort rather than taste, and a frozen field costs them nothing. The global CSS rule cannot
+reach a `requestAnimationFrame` loop, so this is explicit — and the test counts painted glyph
+pixels, because an earlier version of it passed a mutation that deleted the drawing entirely.
+
 ## Data flow (from Phase 1)
 
 ```

@@ -7,6 +7,7 @@ import {
   CONTRAST_PAIRS,
   DECORATIVE_ONLY_TOKENS,
   MINIMUM_RATIO,
+  SCALE_TOKENS,
   type ColourToken,
 } from '@/design/tokens';
 import { renderTokenCss } from '@/design/generate-css';
@@ -125,6 +126,72 @@ describe('generated stylesheet', () => {
     const css = renderTokenCss();
     for (const [token, value] of Object.entries(COLOUR_TOKENS)) {
       expect(css).toContain(`--colour-${token}: ${value};`);
+    }
+  });
+});
+
+describe('the font stacks name fonts that actually exist', () => {
+  /**
+   * The regression this exists to stop.
+   *
+   * `font-sans` named `'Inter'` from Phase 0 to Phase 9 and nothing anywhere loaded it: no
+   * @font-face, no link tag, no dependency. Every screen rendered in whatever `ui-sans-serif`
+   * resolved to on that device, and the token file asserted otherwise in a comment nobody
+   * could falsify.
+   *
+   * A quoted family in a CSS stack is a claim that the font is available. Either the platform
+   * provides it — which for a *branded* family it does not — or this codebase ships it. So
+   * every quoted, non-system family must have a matching @font-face in src/styles/fonts.css.
+   */
+  const fonts = readFileSync(fileURLToPath(new URL('../styles/fonts.css', import.meta.url)), 'utf8');
+
+  /**
+   * Families a platform genuinely supplies, so naming one ships nothing and promises nothing.
+   * Quoted because they contain spaces, not because they are ours.
+   */
+  const SYSTEM_FAMILIES = new Set([
+    'Segoe UI',
+    'SF Mono',
+    'JetBrains Mono',
+    // JetBrains Mono is a developer's local install rather than a platform font: it is a
+    // *preference* deep in the mono stack with ui-monospace ahead of it, so nothing depends
+    // on it arriving. That is the distinction — an unshipped font may be hinted at, never
+    // relied on, and only ui-monospace/Menlo/Consolas decide what a numeral looks like.
+  ]);
+
+  for (const key of ['font-sans', 'font-mono'] as const) {
+    it(`ships every branded family named in ${key}`, () => {
+      const quoted = [...SCALE_TOKENS[key].matchAll(/'([^']+)'/g)].map((match) => match[1] ?? '');
+      const branded = quoted.filter((family) => !SYSTEM_FAMILIES.has(family));
+
+      for (const family of branded) {
+        expect(
+          fonts,
+          `${key} names '${family}' but src/styles/fonts.css declares no @font-face for it — ` +
+            'either ship the font or take it out of the stack',
+        ).toContain(`font-family: '${family}'`);
+      }
+    });
+  }
+
+  it('loads the font from this origin and never from a third party', () => {
+    // §3.5, through a door people forget is a door. A Google Fonts URL hands a tracker every
+    // member's IP address and a Referer naming this app, on every cold load — the same
+    // disclosure the egress boundary exists to prevent, arranged by a stylesheet instead.
+    const urls = [...fonts.matchAll(/url\(\s*['"]?([^'")]+)/g)].map((match) => match[1] ?? '');
+    expect(urls.length, 'no @font-face src at all').toBeGreaterThan(0);
+    for (const url of urls) {
+      expect(url, `font fetched from a third party: ${url}`).not.toMatch(/^(https?:)?\/\//);
+    }
+  });
+
+  it('never blocks first paint on the font arriving', () => {
+    // `font-display: block` hides text until the font lands or three seconds pass. On a train
+    // that is a blank screen where the SITREP should be.
+    const displays = [...fonts.matchAll(/font-display:\s*([a-z]+)/g)].map((match) => match[1]);
+    expect(displays.length).toBeGreaterThan(0);
+    for (const display of displays) {
+      expect(['optional', 'swap', 'fallback']).toContain(display);
     }
   });
 });

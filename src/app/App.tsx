@@ -35,6 +35,7 @@ const WEEK_HARNESS_PATH = '/harness/week';
 const COMMAND_HARNESS_PATH = '/harness/command';
 const PLAYBOOK_HARNESS_PATH = '/harness/playbooks';
 const ACCOUNT_HARNESS_PATH = '/harness/account';
+const HEADER_HARNESS_PATH = '/harness/header';
 
 const SitrepHarness = HARNESS_ENABLED
   ? lazy(() =>
@@ -72,6 +73,10 @@ const AccountHarness = HARNESS_ENABLED
     )
   : null;
 
+const HeaderHarness = HARNESS_ENABLED
+  ? lazy(() => import('@/app/harness/HeaderHarness').then((m) => ({ default: m.HeaderHarness })))
+  : null;
+
 export function App() {
   if (
     HARNESS_ENABLED &&
@@ -80,7 +85,8 @@ export function App() {
     WeekHarness &&
     CommandHarness &&
     PlaybookHarness &&
-    AccountHarness
+    AccountHarness &&
+    HeaderHarness
   ) {
     const path = window.location.pathname;
     const Harness =
@@ -96,7 +102,9 @@ export function App() {
                 ? PlaybookHarness
                 : path === ACCOUNT_HARNESS_PATH
                   ? AccountHarness
-                  : null;
+                  : path === HEADER_HARNESS_PATH
+                    ? HeaderHarness
+                    : null;
     if (Harness) {
       return (
         <ErrorBoundary>

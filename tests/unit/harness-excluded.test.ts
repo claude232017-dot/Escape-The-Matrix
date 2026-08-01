@@ -25,24 +25,53 @@ const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 /**
  * Two independent traces of the harness, checked against different kinds of file.
  *
- * `MARKER` is a fixture string that exists only inside the harness module, so it appears in a
+ * `MARKERS` are fixture strings that exist only inside a harness module, so one appears in a
  * **sourcemap** exactly when that module was bundled — which is the strongest signal available and
  * the one that caught a static-import refactor in practice.
  *
- * `ROUTE` is the path App.tsx compares against. It is checked only against executable assets,
- * because App.tsx's own source is in the sourcemap either way: the map carries the whole original
- * file including a branch Rollup deleted. Asserting on it there would fail permanently and teach
- * whoever hit it to delete the test.
+ * `ROUTES` are the paths App.tsx compares against. They are checked only against executable
+ * assets, because App.tsx's own source is in the sourcemap either way: the map carries the whole
+ * original file including a branch Rollup deleted. Asserting on it there would fail permanently
+ * and teach whoever hit it to delete the test.
+ *
+ * ---------------------------------------------------------------------------
+ * Both lists are read off the source, never typed out here
+ * ---------------------------------------------------------------------------
+ * They were hand-maintained until a seventh harness was added and neither list knew about it.
+ * A missing entry does not fail anything — it silently narrows the search, so the test goes on
+ * passing while the thing it exists to catch walks straight past. That is the worst failure mode
+ * a guard can have, and it is invisible precisely when someone is adding new unauthenticated
+ * screens.
+ *
+ * So the markers are scraped from `src/app/harness/*.tsx` and the routes from App.tsx, and the
+ * count is asserted against the number of harness files. Adding a harness now extends the guard
+ * automatically; forgetting the marker constant fails loudly instead of quietly.
  */
-const MARKERS = [
-  'etm-sitrep-harness-fixture',
-  'etm-ledger-harness-fixture',
-  'etm-week-harness-fixture',
-  'etm-command-harness-fixture',
-  'etm-playbook-harness-fixture',
-  'etm-account-harness-fixture',
+const HARNESS_DIR = join(ROOT, 'src/app/harness');
+
+const HARNESS_FILES = readdirSync(HARNESS_DIR).filter((name) => name.endsWith('.tsx'));
+
+const MARKERS = HARNESS_FILES.map((name) => {
+  const source = readFileSync(join(HARNESS_DIR, name), 'utf8');
+  const marker = /const HARNESS_MARKER = '([^']+)'/.exec(source)?.[1];
+  if (!marker) {
+    throw new Error(
+      `${name} declares no HARNESS_MARKER constant. Every harness needs one: it is the string ` +
+        'this test greps a production build for, and without it the module can be bundled ' +
+        'into a public build with nothing noticing.',
+    );
+  }
+  return marker;
+});
+
+const ROUTES = [
+  ...new Set(
+    [...readFileSync(join(ROOT, 'src/app/App.tsx'), 'utf8').matchAll(/'(\/harness\/[a-z]+)'/g)].map(
+      (match) => match[1] ?? '',
+    ),
+  ),
 ];
-const ROUTES = ['/harness/sitrep', '/harness/ledger', '/harness/week', '/harness/command', '/harness/playbooks', '/harness/account'];
+
 const CODE_EXTENSIONS = ['.js', '.mjs', '.cjs', '.css', '.html'];
 
 let outDir: string | null = null;
@@ -59,6 +88,19 @@ function filesUnder(dir: string): string[] {
 }
 
 describe('the test harness', () => {
+  it('knows about every harness on disk', () => {
+    // The scrape above is only as good as what it found. If a glob change or a renamed constant
+    // ever returns an empty set, every assertion below passes by searching for nothing.
+    expect(HARNESS_FILES.length, 'no harness files found — the scrape is broken').toBeGreaterThan(0);
+    expect(MARKERS.length).toBe(HARNESS_FILES.length);
+    expect(
+      ROUTES.length,
+      `${String(HARNESS_FILES.length)} harness files but ${String(ROUTES.length)} routes in ` +
+        'App.tsx — a harness with no route is dead code, and a route with no harness is a 404 ' +
+        'that renders the real app',
+    ).toBe(HARNESS_FILES.length);
+  });
+
   it('is absent from a default-mode build', () => {
     outDir = mkdtempSync(join(tmpdir(), 'etm-prod-build-'));
 

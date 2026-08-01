@@ -109,6 +109,7 @@ row is attributable to a specific named man who knows the others.
 | Revenue and amounts | `money_entries` — **self and mentor only; peers get zero rows.** Effort is comparable because everyone controls it; revenue is not, and a column of amounts beside each other's names is a league table rather than a circle | Phase 4 |
 | Mentor access | A deliberate, stated choice the member sees **at enrollment**, never a silent default | Phase 2 — see §3 |
 | Third-party analytics / error reporting / log aggregation | **Never** receives protocol detail. Scrubbed at the boundary, and the scrubbing is tested by asserting on the outgoing payloads | Phase 9 |
+| Third-party asset hosts (fonts, CDNs) | **None.** Every asset ships from this origin. A font request to `fonts.gstatic.com` carries each member's IP address and a `Referer` naming this app, on every cold load — the same disclosure as above, arranged through a stylesheet | **Done** — ADR-014; `src/design/tokens.test.ts` fails on any absolute-URL `@font-face` src |
 | Export | Includes everything the member owns, including the full war log | **Done** — `public.export_my_data()`, and `tests/db/export-deletion.test.ts` asserts `bottom_g_tactics` and the itemised protocol results are in it |
 | Deletion | Means deletion | **Done** — `public.delete_my_account()`. The test sweeps every table in `public` for any uuid column still naming him, enumerated from `pg_tables` |
 | Transport | HTTPS only | Ships with Vercel |

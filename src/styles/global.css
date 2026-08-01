@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+@import './fonts.css';
 @import './tokens.css';
 
 /* Bridge the generated custom properties into Tailwind's theme so that `bg-surface-base`

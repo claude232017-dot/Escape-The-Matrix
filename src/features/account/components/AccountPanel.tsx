@@ -35,6 +35,21 @@ export function AccountPanel({
   const [arming, setArming] = useState(false);
   const [typed, setTyped] = useState('');
 
+  /**
+   * Whether we know the address to confirm against.
+   *
+   * Supabase types `User.email` as `string | undefined`, and the shell passes `?? ''`. With an
+   * empty address the old guard read `typed.trim().toLowerCase() !== ''`, which is **false for
+   * an empty box** — so the erase button armed itself instantly, with nothing typed, on the one
+   * control in this app that cannot be undone.
+   *
+   * The database still refused it, because it compares against the real address. But the whole
+   * job of this screen is the distance between a stray tap and destruction, and that distance
+   * had silently gone to zero.
+   */
+  const knowsAddress = email.trim() !== '';
+  const confirmed = knowsAddress && typed.trim().toLowerCase() === email.trim().toLowerCase();
+
   return (
     <section
       aria-labelledby="account-heading"
@@ -77,7 +92,14 @@ export function AccountPanel({
           if you want a copy.
         </p>
 
-        {!arming ? (
+        {!knowsAddress ? (
+          // No address means no confirmation is possible, so deletion is not offered at all.
+          // "Type  to confirm" is not a safeguard, it is a broken one.
+          <p data-testid="delete-unavailable" className="mt-4 text-sm text-text-muted">
+            Deletion needs the email address on your account, and this session does not carry
+            one. Sign out and back in, then try again.
+          </p>
+        ) : !arming ? (
           <Button className="mt-4" variant="secondary" onClick={() => setArming(true)}>
             Delete my account
           </Button>
@@ -108,10 +130,7 @@ export function AccountPanel({
             <div className="flex flex-wrap gap-3">
               {/* Disabled until it matches, and the database checks it again regardless — the
                   browser half is a courtesy, not the rule (§3.3). */}
-              <Button
-                onClick={() => onDelete(typed)}
-                disabled={busy || typed.trim().toLowerCase() !== email.toLowerCase()}
-              >
+              <Button onClick={() => onDelete(typed)} disabled={busy || !confirmed}>
                 {busy ? 'Deleting…' : 'Erase everything'}
               </Button>
               <Button

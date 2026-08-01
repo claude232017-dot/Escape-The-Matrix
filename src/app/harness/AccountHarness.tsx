@@ -22,6 +22,9 @@ const EMAIL = 'member-a@example.com';
 export function AccountHarness() {
   const params = new URLSearchParams(window.location.search);
   const refusal = params.get('refused') === '1' ? 'That is not the address on this account.' : null;
+  // `?noemail=1` reproduces a session whose user carries no address — Supabase types
+  // User.email as string | undefined, and the shell passes `?? ''`.
+  const email = params.get('noemail') === '1' ? '' : EMAIL;
 
   const [exported, setExported] = useState<string | null>(null);
   const [sent, setSent] = useState<string | null>(null);
@@ -29,7 +32,7 @@ export function AccountHarness() {
   return (
     <div data-testid={HARNESS_MARKER} className="min-h-dvh bg-surface-void p-4 text-text-primary">
       <AccountPanel
-        email={EMAIL}
+        email={email}
         busy={false}
         refusal={refusal}
         exportedFilename={exported}

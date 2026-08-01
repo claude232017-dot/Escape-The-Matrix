@@ -31,6 +31,7 @@ import { SignedInShell } from '@/app/SignedInShell';
 const HARNESS_ENABLED = import.meta.env.VITE_TEST_HARNESS === '1';
 const SITREP_HARNESS_PATH = '/harness/sitrep';
 const LEDGER_HARNESS_PATH = '/harness/ledger';
+const WEEK_HARNESS_PATH = '/harness/week';
 
 const SitrepHarness = HARNESS_ENABLED
   ? lazy(() =>
@@ -44,15 +45,23 @@ const LedgerHarness = HARNESS_ENABLED
     )
   : null;
 
+const WeekHarness = HARNESS_ENABLED
+  ? lazy(() =>
+      import('@/app/harness/WeekHarness').then((module) => ({ default: module.WeekHarness })),
+    )
+  : null;
+
 export function App() {
-  if (HARNESS_ENABLED && SitrepHarness && LedgerHarness) {
+  if (HARNESS_ENABLED && SitrepHarness && LedgerHarness && WeekHarness) {
     const path = window.location.pathname;
     const Harness =
       path === SITREP_HARNESS_PATH
         ? SitrepHarness
         : path === LEDGER_HARNESS_PATH
           ? LedgerHarness
-          : null;
+          : path === WEEK_HARNESS_PATH
+            ? WeekHarness
+            : null;
     if (Harness) {
       return (
         <ErrorBoundary>

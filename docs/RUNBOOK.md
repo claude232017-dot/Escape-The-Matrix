@@ -55,7 +55,7 @@ actually gets tested.
 
 ### The browser suite needs the harness build
 
-`npm run test:browser` previews whatever is in `dist`. The SITREP specs drive a harness route
+`npm run test:browser` previews whatever is in `dist`. The SITREP, Ledger and Week specs drive harness routes
 that renders the screen with fixture data and no session — the only way to *measure* the
 sixty-second filing gate rather than assert it. Build it first:
 
@@ -69,6 +69,10 @@ npm run test:browser
 route, the component and its fixtures. `tests/unit/harness-excluded.test.ts` performs a real
 default-mode build and greps the output to prove it, and also fails if anyone adds the variable
 to `.env` or `.env.production`.
+
+The Week harness takes `?today=` so a Sunday is reachable without waiting for one — the week's
+screen is almost entirely phase-dependent, and every phase but one is unreachable on any given
+real day.
 
 If the SITREP specs fail with "sitrep not visible", the first thing to check is whether `dist`
 is a production build.

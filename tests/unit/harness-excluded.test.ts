@@ -34,8 +34,12 @@ const ROOT = fileURLToPath(new URL('../..', import.meta.url));
  * file including a branch Rollup deleted. Asserting on it there would fail permanently and teach
  * whoever hit it to delete the test.
  */
-const MARKERS = ['etm-sitrep-harness-fixture', 'etm-ledger-harness-fixture'];
-const ROUTES = ['/harness/sitrep', '/harness/ledger'];
+const MARKERS = [
+  'etm-sitrep-harness-fixture',
+  'etm-ledger-harness-fixture',
+  'etm-week-harness-fixture',
+];
+const ROUTES = ['/harness/sitrep', '/harness/ledger', '/harness/week'];
 const CODE_EXTENSIONS = ['.js', '.mjs', '.cjs', '.css', '.html'];
 
 let outDir: string | null = null;

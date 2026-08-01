@@ -380,6 +380,18 @@ Recorded here because these are decisions, not omissions, and each has an ADR.
 | Zero-day threshold (§5.2) | **Three active protocols. Unchanged.** Confirmed 2026-07-30 with the day-one consequence understood: three protocols are live on day 1, so failing all of them is an act of treason rather than a tactical failure. Failing everything on the first day is a statement, and the doctrine answers it as one. |
 | The week start (§8) | **Monday to Sunday.** Confirmed 2026-08-01. It was the only item blocking Phase 5. The consequence accepted with it: because boundaries resolve in each member's own timezone, the circle does not share a week — commitments hang off the member, and Phase 6 aligns them for comparison rather than assuming they already line up. |
 
+### Resolved by interpretation — confirm or overrule
+
+- **When a commitment may be declared** (§8). §8 says both *"declare Monday, settle Sunday"*
+  and *"a commitment cannot be edited once the week has started"*, which taken literally
+  together leave no moment at which anything could be declared. Built as: **a commitment is
+  immutable from the instant it is written**, may only be declared for the week he is
+  currently in, and `declared_on` records which day he actually declared it. That is stronger
+  than either sentence rather than a choice between them — there is no edit window at all.
+  Monday stays the ritual in the copy without becoming a gate that locks out a man who joins
+  on a Wednesday. If you want the hard Monday gate instead, it is one predicate in
+  `0008_commitments.sql` and one in `commitment-draft.ts`.
+
 ### Still open, in priority order
 
 1. **Which protocols are `is_treason_trigger`** beyond the sexual-discipline oath. Seeded as

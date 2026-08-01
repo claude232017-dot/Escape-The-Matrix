@@ -8,7 +8,9 @@ import { ProfileScreen } from '@/features/profile/components/ProfileScreen';
 import { ForgeScreen, type ForgeView } from '@/features/forge/components/ForgeScreen';
 import { useForgeData } from '@/features/forge/use-forge-data';
 import { LedgerScreen } from '@/features/ledger/components/LedgerScreen';
+import { WeekScreen } from '@/features/week/components/WeekScreen';
 import { useLedgerData } from '@/features/ledger/use-ledger-data';
+import { useWeekData } from '@/features/week/use-week-data';
 import { Button } from '@/ui/Button';
 import { TabPanel, Tabs } from '@/ui/Tabs';
 
@@ -19,7 +21,7 @@ import { TabPanel, Tabs } from '@/ui/Tabs';
  * auth feature and passes plain values down to the forge, circle and profile features, so none of
  * them import each other.
  *
- * Three tabs, with the rule for what belongs in each stated in @/ui/Tabs. The one worth repeating
+ * Five tabs, with the rule for what belongs in each stated in @/ui/Tabs. The one worth repeating
  * here: **nothing without a deadline goes on Today.** The build-status panel that used to sit
  * between the SITREP and the invitations is developer scaffolding and has moved to a footer line,
  * because a card telling a man which phase the software is in was competing with the card telling
@@ -35,6 +37,7 @@ export function SignedInShell() {
   // Intel — nine round trips per tap. The data belongs to the session, not to a panel.
   const data = useForgeData(profile?.id ?? '', profile?.timezone ?? 'UTC');
   const ledger = useLedgerData(profile?.id ?? '', profile?.timezone ?? 'UTC');
+  const week = useWeekData(profile?.id ?? '', profile?.timezone ?? 'UTC');
 
   if (!profile) return null; // Unreachable: AuthGate only renders this in the 'app' view.
 
@@ -69,6 +72,7 @@ export function SignedInShell() {
                 badge: forge?.outstanding ? String(forge.outstanding) : undefined,
               },
               { value: 'ledger', label: 'Ledger' },
+              { value: 'week', label: 'Week' },
               { value: 'intel', label: 'Intel' },
               { value: 'circle', label: 'Circle' },
             ]}
@@ -107,6 +111,10 @@ export function SignedInShell() {
 
             <TabPanel value="ledger">
               <LedgerScreen data={ledger} profileId={profile.id} />
+            </TabPanel>
+
+            <TabPanel value="week">
+              <WeekScreen data={week} profileId={profile.id} />
             </TabPanel>
 
             <TabPanel value="intel">

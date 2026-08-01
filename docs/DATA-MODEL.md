@@ -237,13 +237,27 @@ Split by audience, like the debrief (ADR-013): **effort is circle-readable, amou
   Upserts rather than delete-then-inserts, because an absent action means "not recorded" rather
   than "changed to zero".
 
-## Planned
-
 ### Commitments — Phase 5
 
-- **`commitments`** — `profile_id`, `week_start`, `text` (`public.capped_text_140`),
-  `outcome` (`pending` | `hit` | `missed`), `resolved_at`. **Max three per week, by
-  constraint.**
+- **`commitments`** — `profile_id`, `week_start` (a Monday, by CHECK), `body`
+  (`public.capped_text_140`), `outcome` (`pending` | `hit` | `missed`), `declared_on`,
+  `resolved_at`. **Max three per member-week, by constraint trigger.** Circle-readable,
+  because the enrollment disclosure says the other men see "your weekly commitments and
+  whether you hit them".
+- **Immutable once written.** `app.enforce_commitment_windows()` refuses any change to
+  `body`, `week_start`, `profile_id` or `declared_on` — there is no edit at any point, which
+  is stronger than DOCTRINE §8's "cannot be edited once the week has started" and is what
+  "declaring is committing" actually requires. Settling opens on Sunday
+  (`week_start + 6`) and never closes.
+- **`declared_on`** is stamped by a trigger and pinned to today by the insert policy, so a
+  Saturday scramble cannot be dressed up as Monday discipline.
+- **`public.declare_commitments(week_start, bodies[])`** — the whole slate in one call,
+  idempotent within the day. Deleting is same-day only, which is what makes the retry safe
+  and gives a typo one way out.
+- **`app.week_start_for(profile)`** — the Monday of his current week, in his timezone.
+  Mirrors `startOfWeek()` in `src/lib/date.ts`.
+
+## Planned
 
 ### Command — Phases 6–7
 

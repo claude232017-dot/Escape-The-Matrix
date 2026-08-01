@@ -3,6 +3,12 @@ import { loadForge } from '@/features/forge/use-forge-data';
 import { sendSitrep } from '@/features/forge/sitrep-write';
 import { sendDebrief } from '@/features/forge/debrief-write';
 import { sendBusinessDay, sendMoneyEntry, sendVenture } from '@/features/ledger/ledger-write';
+import { loadWeek } from '@/features/week/use-week-data';
+import {
+  sendCommitments,
+  sendSettlement,
+  withdrawCommitment,
+} from '@/features/week/commitment-write';
 import { resetSupabaseClient } from '@/lib/supabase';
 import { startHarness, type Actor, type Harness } from './harness.ts';
 
@@ -316,6 +322,120 @@ describeE2E('the app against a real PostgREST', () => {
       );
       expect(response.status).toBe(200);
       expect(await response.json()).toEqual([{ trigger_kind: 'low_energy' }]);
+    });
+  });
+
+  describe('the week', () => {
+    it('declares a slate and reads it back', async () => {
+      h.become(memberA);
+      const { rows } = await h.db.query<{ monday: string }>(
+        `select to_char(app.week_start_for($1), 'YYYY-MM-DD') as monday`,
+        [memberA.id],
+      );
+      const monday = rows[0]!.monday;
+
+      const result = await sendCommitments({
+        weekStart: monday,
+        bodies: ['Ten sales calls', 'Ship the landing page'],
+      });
+      expect(result.written).toBe(2);
+
+      const loaded = await loadWeek(memberA.id, today);
+      expect(loaded.current.commitments.map((c) => c.body)).toEqual([
+        'Ten sales calls',
+        'Ship the landing page',
+      ]);
+      // `declared_on` is stamped by the database, never sent — so this is the server's answer
+      // to "when did he actually declare it", not the client's claim.
+      expect(loaded.current.commitments[0]?.declaredOn).toBe(today);
+    });
+
+    it('resolves the embed on profiles rather than answering 400', async () => {
+      // The week query embeds `profiles!inner(display_name)` so the circle panel can put a name
+      // beside a commitment. That embed is the same shape as the one that answered 400 on every
+      // Forge load for a week, so it is exercised against a real server rather than trusted.
+      h.become(memberA);
+      const loaded = await loadWeek(memberA.id, today);
+      expect(loaded.circle.length).toBeGreaterThan(0);
+      expect(loaded.circle[0]?.displayName).not.toBe('—');
+    });
+
+    it('shows a peer what the circle declared, as the disclosure says', async () => {
+      h.become(peerA);
+      const loaded = await loadWeek(peerA.id, today);
+      const names = new Set(loaded.circle.map((c) => c.displayName));
+      expect(names.size).toBeGreaterThan(0);
+      expect(loaded.current.commitments, 'a peer saw his own week as another man’s').toEqual([]);
+    });
+
+    it('gives another circle nothing', async () => {
+      h.become(outsider);
+      const loaded = await loadWeek(outsider.id, today);
+      expect(loaded.circle).toEqual([]);
+      expect(loaded.current.commitments).toEqual([]);
+    });
+
+    it('refuses a fourth commitment through the real API', async () => {
+      h.become(memberA);
+      const { rows } = await h.db.query<{ monday: string }>(
+        `select to_char(app.week_start_for($1), 'YYYY-MM-DD') as monday`,
+        [memberA.id],
+      );
+      await expect(
+        sendCommitments({
+          weekStart: rows[0]!.monday,
+          bodies: ['One', 'Two', 'Three', 'Four'],
+        }),
+      ).rejects.toThrow(/commitments_ceiling/);
+    });
+
+    it('refuses to settle a week that is not over', async () => {
+      // Unless today is Sunday, in which case settling is exactly what should be allowed. The
+      // assertion follows the rule rather than the calendar — see tests/db/commitments-rls.
+      h.become(memberA);
+      const loaded = await loadWeek(memberA.id, today);
+      const first = loaded.current.commitments[0];
+      expect(first).toBeDefined();
+
+      const { rows } = await h.db.query<{ dow: string }>(
+        `select extract(isodow from app.today_for($1))::text as dow`,
+        [memberA.id],
+      );
+      const settling = sendSettlement({ id: first!.id, outcome: 'hit' });
+
+      if (Number(rows[0]!.dow) < 7) {
+        await expect(settling).rejects.toThrow(/commitment_too_early/);
+      } else {
+        await expect(settling).resolves.toBeUndefined();
+      }
+    });
+
+    it('refuses a peer settling another man’s commitment', async () => {
+      // RLS, through the real API. A refused update is silent in PostgREST — it matches no rows
+      // rather than erroring — so the assertion is that the row did not change.
+      h.become(memberA);
+      const loaded = await loadWeek(memberA.id, today);
+      const target = loaded.current.commitments[0]!;
+
+      h.become(peerA);
+      await sendSettlement({ id: target.id, outcome: 'hit' }).catch(() => undefined);
+
+      const { rows } = await h.db.query<{ outcome: string }>(
+        `select outcome::text from public.commitments where id = $1`,
+        [target.id],
+      );
+      expect(rows[0]?.outcome, 'a peer settled a commitment that was not his').toBe('pending');
+    });
+
+    it('withdraws only what he declared today', async () => {
+      h.become(memberA);
+      const before = await loadWeek(memberA.id, today);
+      const target = before.current.commitments.at(-1)!;
+
+      await expect(withdrawCommitment(target.id)).resolves.toBeUndefined();
+
+      const after = await loadWeek(memberA.id, today);
+      expect(after.current.commitments.map((c) => c.id)).not.toContain(target.id);
     });
   });
 

@@ -11,7 +11,16 @@ import {
 import type { Session } from '@supabase/supabase-js';
 import { getSupabase, isSupabaseConfigured } from '@/lib/supabase';
 import { clearUserState } from '@/lib/local-state';
-import { isRecoveryUrl, stripRecoveryFromUrl } from '@/features/auth/recovery';
+// All three statically. `buildRecoveryRedirectUrl` used to be a dynamic import here, which
+// bought nothing and warned on every build: `isRecoveryUrl` is called from the same module
+// during the first render (§3.7 — the recovery decision is made from the URL before the auth
+// library has finished), so this module can never be split out of the entry chunk. A lazy
+// import of a module that is already loaded is just a promise.
+import {
+  buildRecoveryRedirectUrl,
+  isRecoveryUrl,
+  stripRecoveryFromUrl,
+} from '@/features/auth/recovery';
 import { resolveAuthView, type AuthView } from '@/features/auth/view';
 import { authErrorMessage } from '@/features/auth/error-message';
 import { DISCLOSURE_VERSION } from '@/features/auth/disclosure';
@@ -286,7 +295,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setBusy(true);
     setOperationError(null);
     try {
-      const { buildRecoveryRedirectUrl } = await import('@/features/auth/recovery');
       const { error: authError } = await getSupabase().auth.resetPasswordForEmail(
         email.trim().toLowerCase(),
         { redirectTo: buildRecoveryRedirectUrl(window.location.origin) },

@@ -285,13 +285,42 @@ would be rejected. `FORCE` is not load-bearing here: application traffic arrives
 
 ---
 
-## 5. Known gaps at Phase 0
+## 5. Known gaps — current as of Phase 4
 
 Stated rather than implied, because a gap nobody wrote down becomes a gap nobody fixes.
 
-- **No auth yet.** Phase 1. There is no login, no session, and no user data.
-- **No rate limiting on auth.** Phase 9.
-- **No error boundaries.** Phase 9.
-- **No dependency audit in CI.** Phase 9. `npm audit` currently reports 0 vulnerabilities
-  across 267 packages, checked manually at the Phase 0 gate.
-- **The RLS matrix has one row** because there is one table.
+This section was headed *"Known gaps at Phase 0"* and was never revised, which made it
+wrong in the most dangerous direction a security document can be wrong: it under-reported
+what had been built and over-reported what was missing. It claimed there was no auth and
+no error boundary long after both shipped, and described an RLS matrix with one row when
+there were seventeen tables. A frozen gaps list is worse than no gaps list, because
+somebody reads it and believes it. It is a living section now, and the heading carries the
+phase it was last checked against.
+
+**Open:**
+
+- **No rate limiting on auth.** Phase 9. Supabase applies its own defaults; nothing here
+  adds to them.
+- **No dependency audit in CI.** Phase 9. `npm audit` reports 0 vulnerabilities across 308
+  packages, checked by hand at the Phase 4 gate — which is exactly the manual step Phase 9
+  is meant to remove.
+- **Protocol detail is not scrubbed at an egress boundary.** Phase 9, and see §2. Nothing
+  is currently at risk because no analytics service, error reporter or log aggregator is
+  wired up: the only egress today is `console.error` in the error boundary and the auth
+  provider, which stays on the member's own device. The scrubbing and its test must land
+  *with* the first reporter, not after it.
+- **Export and deletion are not built.** Phase 8. §2 promises both, and the promise is
+  currently kept by hand by the owner running SQL.
+- **GoTrue is not covered by an automated test.** `tests/e2e` drives real PostgREST, so
+  every RLS policy and every read and write path is exercised against the real API. Signup,
+  the two auth triggers, password recovery and §3.7's ordering are covered only by the
+  browser suite against a harness, and by the bootstrap being run by hand.
+
+**Closed since Phase 0:**
+
+- ~~No auth.~~ Phase 1 — invite-only, enforced by a `BEFORE INSERT` trigger on
+  `auth.users`, tested in `tests/db/identity-rls.test.ts`.
+- ~~No error boundaries.~~ Phase 1 — `src/app/ErrorBoundary.tsx`.
+- ~~The RLS matrix has one row.~~ It covers all seventeen tables in §4, and
+  `tests/db/every-table-every-verb.test.ts` sweeps them from the catalogue rather than
+  from a list somebody maintains.

@@ -330,9 +330,17 @@ blocking step in the enrollment flow, not a line in a settings page.
 
 ## 8. The week
 
-- The week runs **Monday to Sunday**. **[ASSUMED]** — implied by "declare Monday, settle
-  Sunday" but never stated outright.
-- Week boundaries are computed in each member's own timezone.
+- The week runs **Monday to Sunday**. Confirmed by the owner 2026-08-01. Beyond matching
+  "declare Monday, settle Sunday", Monday is ISO-8601, which means Postgres
+  `date_trunc('week', …)` and `extract(isodow …)` give the boundary directly — one
+  expression composed with the timezone resolution `app.today_for()` already does. A Sunday
+  week would need offset arithmetic in both SQL and TypeScript, kept in step as a mirrored
+  rule, for no doctrinal gain. `WEEK_STARTS_ON` in `src/lib/date.ts` is the single constant.
+- Week boundaries are computed in each member's own timezone. **So "this week" is not one
+  row for the circle**: Auckland crosses into Monday about twenty-one hours before Los
+  Angeles. Commitments and weekly reviews therefore hang off the member, not off a shared
+  `weeks` table — a design decision this line makes for Phase 5, so it is stated here rather
+  than discovered there.
 - A member declares **up to three** commitments for the week. Three is a cap enforced by a
   database constraint, not a suggestion.
 - A commitment **cannot be edited once the week has started**. Declaring is committing —
@@ -370,12 +378,12 @@ Recorded here because these are decisions, not omissions, and each has an ADR.
 | The leading business actions (ADR-003) | **All six confirmed as proposed.** Seventh slot left open. |
 | Protocol activation days (§2.0) | **Five waves: days 1, 4, 8, 15, 22.** |
 | Zero-day threshold (§5.2) | **Three active protocols. Unchanged.** Confirmed 2026-07-30 with the day-one consequence understood: three protocols are live on day 1, so failing all of them is an act of treason rather than a tactical failure. Failing everything on the first day is a statement, and the doctrine answers it as one. |
+| The week start (§8) | **Monday to Sunday.** Confirmed 2026-08-01. It was the only item blocking Phase 5. The consequence accepted with it: because boundaries resolve in each member's own timezone, the circle does not share a week — commitments hang off the member, and Phase 6 aligns them for comparison rather than assuming they already line up. |
 
 ### Still open, in priority order
 
-1. **The week start** (§8). Monday assumed — implied by "declare Monday, settle Sunday"
-   but never stated. Blocks Phase 5.
-2. **Which protocols are `is_treason_trigger`** beyond the sexual-discipline oath. Seeded as
-   the oath alone.
-3. **The Fortress Protocol** (§2.4). Written per man — implemented that way, as
+1. **Which protocols are `is_treason_trigger`** beyond the sexual-discipline oath. Seeded as
+   the oath alone. Does not block a phase — a protocol can be marked later without a
+   migration, and past resets stay readable under the ruleset they were filed under.
+2. **The Fortress Protocol** (§2.4). Written per man — implemented that way, as
    `profiles.fortress_protocol`. Confirm there is no shared standard it should default to.

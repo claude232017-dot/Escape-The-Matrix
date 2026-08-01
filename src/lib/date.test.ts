@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
 import {
   addDays,
@@ -18,6 +19,7 @@ import {
   offsetMsAt,
   startOfLocalDay,
   startOfWeek,
+  WEEK_STARTS_ON,
 } from '@/lib/date';
 
 describe('the test environment itself', () => {
@@ -180,6 +182,24 @@ describe('addDays / compareDates / eachDay', () => {
 });
 
 describe('week boundaries', () => {
+  it('starts the week where DOCTRINE §8 says it does', () => {
+    // These helpers were written in Phase 0 assuming Monday, while DOCTRINE §8 still carried
+    // an [ASSUMED] tag on it. The owner confirmed Monday on 2026-08-01, which closed the last
+    // question blocking Phase 5 — so the constant and the doctrine now agree, and this pins
+    // them together rather than trusting that they will stay that way.
+    //
+    // If the week ever moves, this fails first and points at the document, which is the right
+    // order: the doctrine decides and the code follows.
+    const doctrine = readFileSync(new URL('../../docs/DOCTRINE.md', import.meta.url), 'utf8');
+    expect(doctrine).toMatch(/The week runs \*\*Monday to Sunday\*\*/);
+    expect(doctrine).not.toMatch(/The week runs \*\*Monday to Sunday\*\*\. \*\*\[ASSUMED\]/);
+    expect(WEEK_STARTS_ON, 'DOCTRINE §8 says Monday; WEEK_STARTS_ON does not').toBe(1);
+
+    // 1 = Monday under the same numbering `dayOfWeek` uses, which is the numbering the
+    // helpers actually consume. Asserted rather than assumed — "1" means nothing on its own.
+    expect(dayOfWeek('2026-07-27')).toBe(WEEK_STARTS_ON);
+  });
+
   it('starts the week on Monday and ends it on Sunday', () => {
     // 2026-07-29 is a Wednesday.
     expect(dayOfWeek('2026-07-29')).toBe(3);

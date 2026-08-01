@@ -12,7 +12,7 @@ is being asked to look at a revenue figure and believe it. `0.1 + 0.2 !== 0.3`.
 ## Decision
 
 Every amount is a `bigint` count of the currency's **minor units**, paired with an ISO-4217
-code. Storage is `amount_minor bigint NOT NULL` plus `currency app.currency_code`. There is
+code. Storage is `amount_minor bigint NOT NULL` plus `currency public.currency_code`. There is
 no `number` representation of an amount at any layer.
 
 Formatting happens **once, at the edge**, by handing `Intl.NumberFormat` an exact decimal

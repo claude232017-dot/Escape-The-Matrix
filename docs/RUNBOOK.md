@@ -13,6 +13,26 @@ npm run dev
 `npm run verify` runs the full gate: typecheck → lint → unit tests → database tests →
 build. It must pass from a clean clone.
 
+### API tests need a PostgREST
+
+```bash
+DATABASE_URL=… npm run test:api      # downloads PostgREST once, caches it in /tmp
+POSTGREST_BIN=/path/to/postgrest DATABASE_URL=… npm run test:api   # or bring your own
+```
+
+This is the suite that runs the application's **own** query code — `loadForge`,
+`sendVenture`, `sendSitrep` — against a real PostgREST, rather than against `pg`. It exists
+because two Phase 4 bugs shipped with every other test green: a domain cast PostgREST emits
+and the database tests do not, and an embed with no foreign key behind it. Neither is
+visible without a real server.
+
+It starts PostgREST itself and puts a small proxy in front so the real `getSupabase()`
+client works unmodified — see `tests/api/harness.ts`. GoTrue is **not** part of it, so
+signup and password recovery stay covered by the browser suite alone.
+
+Not in `npm run verify`, for the same reason the browser suite is not: it needs something
+fetched from the network. CI runs it in the database job, with the binary cached.
+
 Browser tests are separate because they need a browser:
 
 ```bash

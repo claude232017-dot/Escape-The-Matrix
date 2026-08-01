@@ -17,12 +17,19 @@ be neither stale nor widened. See **ADR-010** — this reverses part of the Phas
 
 ## Shipped in Phase 0
 
-### Domains (`app` schema, not exposed through the API)
+### Domains
+
+They live in `public`, beside the tables that use them, and they were moved there from `app`
+by migration 0007. The reason is worth knowing before anything else is put in `app`: PostgREST
+writes a **schema-qualified cast** for a domain column — `values ($1::public.capped_text_140)`
+— and resolving that name at parse time needs USAGE on the schema. `authenticated` does not
+have it on `app` (ADR-011), so a domain left there is a column no browser can write to, failing
+before RLS is ever consulted. A domain carries no rows, so moving it grants nothing.
 
 | Domain | Definition | Why |
 |---|---|---|
-| `app.capped_text_140` | `text` with `char_length <= 140` | Every free-text field in this product is capped. The cap is a schema decision, not a UI suggestion; the client-side limit only exists to give a fast error. See ADR-001. |
-| `app.currency_code` | `char(3)` matching `^[A-Z]{3}$` | Always stored beside a `bigint` of minor units. Mirrors `CURRENCY_EXPONENTS` in `src/lib/money.ts`. |
+| `public.capped_text_140` | `text` with `char_length <= 140` | Every free-text field in this product is capped. The cap is a schema decision, not a UI suggestion; the client-side limit only exists to give a fast error. See ADR-001. |
+| `public.currency_code` | `char(3)` matching `^[A-Z]{3}$` | Always stored beside a `bigint` of minor units. Mirrors `CURRENCY_EXPONENTS` in `src/lib/money.ts`. |
 
 ### `public.app_meta`
 
@@ -234,7 +241,7 @@ Split by audience, like the debrief (ADR-013): **effort is circle-readable, amou
 
 ### Commitments — Phase 5
 
-- **`commitments`** — `profile_id`, `week_start`, `text` (`app.capped_text_140`),
+- **`commitments`** — `profile_id`, `week_start`, `text` (`public.capped_text_140`),
   `outcome` (`pending` | `hit` | `missed`), `resolved_at`. **Max three per week, by
   constraint.**
 
@@ -252,11 +259,11 @@ Split by audience, like the debrief (ADR-013): **effort is circle-readable, amou
 
 ## Conventions
 
-- **Money** is always two columns: `bigint` minor units + `app.currency_code`. Never a
+- **Money** is always two columns: `bigint` minor units + `public.currency_code`. Never a
   float, never `double precision`, at any layer.
 - **Dates** that represent a member's day are Postgres `date`, resolved in his timezone
   before insert. Timestamps that represent an instant are `timestamptz`.
-- **Free text** uses `app.capped_text_140` unless there is a documented reason not to.
+- **Free text** uses `public.capped_text_140` unless there is a documented reason not to.
 - **Enums** are Postgres enum types, so an invalid value cannot be stored even by a client
   that skipped validation.
 - **Nothing is deleted** on a reset. History is append-only where it records what a man

@@ -29,7 +29,7 @@ Concretely, the debrief is:
 - **Bottom G Tactic** — `occurred_at_hour` (0–23), `trigger_kind` (enum), `propaganda`
   (≤140), `protocol_id`, `outcome` (enum)
 
-The cap is enforced by `app.capped_text_140` in the database, not only in the UI.
+The cap is enforced by `public.capped_text_140` in the database, not only in the UI.
 
 ## Options considered
 

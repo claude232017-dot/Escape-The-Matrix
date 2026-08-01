@@ -19,13 +19,13 @@ other. Current pairs:
 
 | Rule | TypeScript | SQL |
 |---|---|---|
-| 140-character cap on structured prose | feature validation modules | `app.capped_text_140` |
-| Supported currencies | `CURRENCY_EXPONENTS`, `src/lib/money.ts` | `app.currency_code` + per-table CHECK |
+| 140-character cap on structured prose | feature validation modules | `public.capped_text_140` |
+| Supported currencies | `CURRENCY_EXPONENTS`, `src/lib/money.ts` | `public.currency_code` + per-table CHECK |
 | One SITREP per member per local date | `src/lib/date.ts` | unique index on `(enrollment_id, local_date)` |
 | A MED option may only accompany a MED pass | `setStatus()`, `src/features/forge/sitrep-draft.ts` | `protocol_results_med_option_only_for_med_pass` |
 | An insight needs both its halves | `insightState()`, `src/features/forge/debrief-draft.ts` | `debriefs_insight_paired` |
 | An attack has an outcome; a quiet day does not | `blockers()`, `src/features/forge/debrief-draft.ts` | `debriefs_outcome_iff_attacked` |
-| Money is bigint minor units | `src/lib/money.ts` | `money_entries.amount_minor bigint` + `app.currency_code` |
+| Money is bigint minor units | `src/lib/money.ts` | `money_entries.amount_minor bigint` + `public.currency_code` |
 | The hour an attack landed, in his own timezone | `localHour()`, `src/features/forge/debrief-draft.ts` | `bottom_g_tactics.occurred_at_hour`, stored as a plain 0–23 integer |
 | What today's date is, for a member | `getLocalDateString()`, `src/lib/date.ts` | `app.today_for()`, and inlined once in `public.start_campaign_enrollment()` |
 | What a day amounts to (complete / repeat / reset) | `evaluateDay()`, `src/features/forge/doctrine.ts` | not enforced in SQL — see below |
@@ -311,7 +311,7 @@ phase it was last checked against.
   *with* the first reporter, not after it.
 - **Export and deletion are not built.** Phase 8. §2 promises both, and the promise is
   currently kept by hand by the owner running SQL.
-- **GoTrue is not covered by an automated test.** `tests/e2e` drives real PostgREST, so
+- **GoTrue is not covered by an automated test.** `tests/api` drives real PostgREST, so
   every RLS policy and every read and write path is exercised against the real API. Signup,
   the two auth triggers, password recovery and §3.7's ordering are covered only by the
   browser suite against a harness, and by the bootstrap being run by hand.

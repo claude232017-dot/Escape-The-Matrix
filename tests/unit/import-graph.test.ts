@@ -181,7 +181,15 @@ describe('module graph', () => {
     // The invariant that fixes it: a screen mounted in more than one place does not fetch. Its
     // data is loaded once by the shell and handed down. Asserted on the import graph because a
     // reviewer cannot see "this component is mounted twice" from inside the component.
-    const noFetching = ['features/forge/components/ForgeScreen.tsx'];
+    // LedgerScreen joined the list when the venture insert moved out of it into
+    // ledger-write.ts. It was the last piece of data access sitting inside a component, and it
+    // was also the write that broke in a member's hands while every test passed — data access a
+    // component owns is data access no test can call. Both screens now take data as a prop and
+    // send through a named function.
+    const noFetching = [
+      'features/forge/components/ForgeScreen.tsx',
+      'features/ledger/components/LedgerScreen.tsx',
+    ];
     const violations: string[] = [];
     for (const file of noFetching) {
       const targets = graph.get(join(SRC, file)) ?? [];

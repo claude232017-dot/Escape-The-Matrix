@@ -71,7 +71,15 @@ interface ProtocolRowData {
   protocol_med_options: MedOptionRow[] | null;
 }
 
-async function loadForge(profileId: string, today: string): Promise<Loaded | null> {
+/**
+ * Every read the Forge makes, in one function.
+ *
+ * Exported so `tests/api` can drive *this* against a real PostgREST rather than a
+ * re-typing of these queries. That distinction is the entire point of that suite: a test
+ * that restates the queries proves the restatement works. The 400 that logged on every
+ * page load for a week lived in the exact string below.
+ */
+export async function loadForge(profileId: string, today: string): Promise<Loaded | null> {
   const supabase = getSupabase();
 
   const { data: campaignRows, error: campaignError } = await supabase

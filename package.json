@@ -15,7 +15,8 @@
     "tokens:build": "node scripts/build-tokens.ts",
     "db:apply": "node scripts/db/apply-migrations.ts",
     "db:test": "vitest run --config vitest.db.config.ts",
-    "verify": "npm run typecheck && npm run lint && npm run test && npm run db:test && npm run build"
+    "verify": "npm run typecheck && npm run lint && npm run test && npm run db:test && npm run build",
+    "test:api": "vitest run --config vitest.api.config.ts"
   },
   "repository": {
     "type": "git",

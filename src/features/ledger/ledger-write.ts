@@ -12,6 +12,38 @@ import type { BusinessDayPayload, MoneyPayload } from '@/features/ledger/ledger-
  * ambiguous failure land on the same row instead of booking the payment twice.
  */
 
+export interface VenturePayload {
+  ownerId: string;
+  name: string;
+  /** Free-ish but capped — `public.capped_text_140`. Null when he did not say. */
+  kind: string | null;
+  startedOn: string;
+}
+
+/**
+ * Name a venture.
+ *
+ * A plain insert; the RLS policy `ventures_write_self` is the whole rule.
+ *
+ * This lived inline in the NewVenture component until it became the write that proved the
+ * suite could not see a whole class of failure: `kind` is a `capped_text_140` column, PostgREST
+ * emits a schema-qualified cast for it, and while that domain lived in `app` — which
+ * `authenticated` cannot reach (ADR-011) — the statement was rejected before RLS was consulted.
+ * Every test was green because none of them went through PostgREST.
+ *
+ * It is here now for the same reason every other write is: so `tests/api` can call it against a
+ * real server. Data access in a component is data access no test can reach.
+ */
+export async function sendVenture(payload: VenturePayload): Promise<void> {
+  const { error } = await getSupabase().from('ventures').insert({
+    owner_id: payload.ownerId,
+    name: payload.name,
+    kind: payload.kind,
+    started_on: payload.startedOn,
+  });
+  if (error) throw error;
+}
+
 export async function sendBusinessDay(payload: BusinessDayPayload): Promise<{ written: number }> {
   const { data, error } = await getSupabase().rpc('file_business_day', {
     p_venture_id: payload.ventureId,

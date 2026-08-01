@@ -1,7 +1,6 @@
 import { useCallback, useRef, useState, type ReactNode } from 'react';
 import { parseMoney, type CurrencyCode } from '@/lib/money';
 import type { OutboxEntry } from '@/lib/outbox';
-import { getSupabase } from '@/lib/supabase';
 import { describeQueue, useOutbox } from '@/lib/use-outbox';
 import {
   businessDayKey,
@@ -15,7 +14,12 @@ import {
   type MoneyPayload,
 } from '@/features/ledger/ledger-draft';
 import { CATEGORY_DIRECTION } from '@/features/ledger/ledger-draft';
-import { ledgerRefusalMessage, sendBusinessDay, sendMoneyEntry } from '@/features/ledger/ledger-write';
+import {
+  ledgerRefusalMessage,
+  sendBusinessDay,
+  sendMoneyEntry,
+  sendVenture,
+} from '@/features/ledger/ledger-write';
 import { LedgerForm, type LedgerState } from '@/features/ledger/components/LedgerForm';
 import type { LedgerData, LedgerLoaded } from '@/features/ledger/use-ledger-data';
 import { Button } from '@/ui/Button';
@@ -226,17 +230,19 @@ function NewVenture({
   async function save() {
     setBusy(true);
     setProblem(null);
-    const { error } = await getSupabase().from('ventures').insert({
-      owner_id: profileId,
-      name: name.trim(),
-      kind: kind.trim() === '' ? null : kind.trim(),
-      started_on: localDate,
-    });
-    if (error) {
+    try {
+      await sendVenture({
+        ownerId: profileId,
+        name: name.trim(),
+        kind: kind.trim() === '' ? null : kind.trim(),
+        startedOn: localDate,
+      });
+    } catch (cause) {
+      const message = (cause as { message?: string }).message ?? 'Could not save that.';
       setProblem(
-        /ventures_name_unique_per_owner/.test(error.message)
+        /ventures_name_unique_per_owner/.test(message)
           ? 'You already have a venture with that name.'
-          : error.message,
+          : message,
       );
       setBusy(false);
       return;

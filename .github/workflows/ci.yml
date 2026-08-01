@@ -12,6 +12,10 @@ concurrency:
 
 env:
   NODE_VERSION: '22'
+  # Pinned, and it is the cache key. Bumping it here is the whole upgrade: the next run
+  # misses the cache and fetches the new binary. Keep it in step with POSTGREST_VERSION in
+  # scripts/db/postgrest.ts, which is what a developer downloads locally.
+  POSTGREST_VERSION: 'v12.2.3'
 
 jobs:
   verify:
@@ -91,6 +95,34 @@ jobs:
 
       - name: Apply migrations and assert the RLS posture
         run: npm run db:test
+
+      # The suite that would have caught the two Phase 4 bugs, both of which shipped with
+      # every other test green: a domain cast PostgREST emits and `tests/db` does not, and an
+      # embed with no foreign key behind it. Neither is visible without a real server.
+      #
+      # The binary is cached by version, so this is a download on a cold cache and a no-op
+      # afterwards. It is fetched here rather than vendored because a 20 MB binary in the
+      # repository is a worse trade than thirty seconds on a cache miss.
+      - name: Cache PostgREST
+        id: postgrest-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/postgrest
+          key: postgrest-${{ env.POSTGREST_VERSION }}
+
+      - name: Install PostgREST
+        if: steps.postgrest-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/.cache/postgrest
+          curl -sSLf -o /tmp/postgrest.tar.xz \
+            "https://github.com/PostgREST/postgrest/releases/download/${POSTGREST_VERSION}/postgrest-${POSTGREST_VERSION}-linux-static-x64.tar.xz"
+          tar xf /tmp/postgrest.tar.xz -C ~/.cache/postgrest
+          chmod +x ~/.cache/postgrest/postgrest
+
+      - name: API tests against a real PostgREST
+        env:
+          POSTGREST_BIN: /home/runner/.cache/postgrest/postgrest
+        run: npm run test:api
 
   browser:
     name: Browser tests

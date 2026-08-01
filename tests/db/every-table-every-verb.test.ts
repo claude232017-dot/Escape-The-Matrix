@@ -206,6 +206,21 @@ describeDb('every table, every verb', () => {
       [memberA],
     );
 
+    // A promoted playbook and one man's application of it. The application is the interesting
+    // one for this sweep: it is self-and-mentor, so the outsider must get nothing.
+    const playbook = await client.query<{ id: string }>(
+      `insert into public.playbooks (circle_id, promoted_by, title, body)
+       select $1, p.id, 'Clothes out the night before', 'Lay the kit out before bed'
+         from public.profiles p where p.role = 'mentor' limit 1
+       returning id`,
+      [circleA],
+    );
+    await client.query(
+      `insert into public.playbook_applications (playbook_id, profile_id, adopted_on)
+       values ($1, $2, app.today_for($2))`,
+      [playbook.rows[0]!.id, memberA],
+    );
+
     const { rows } = await client.query<{ tablename: string }>(
       `select tablename from pg_tables where schemaname = 'public' order by tablename`,
     );

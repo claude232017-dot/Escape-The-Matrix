@@ -7,6 +7,7 @@ import { loadWeek } from '@/features/week/use-week-data';
 import { loadCommand } from '@/features/command/use-command-data';
 import { sendDirective } from '@/features/command/directive-write';
 import { loadPlaybooks } from '@/features/playbooks/use-playbook-data';
+import { deleteAccount, exportFilename, fetchExport } from '@/features/account/account-write';
 import {
   adoptPlaybook,
   answerApplication,
@@ -637,6 +638,59 @@ describeE2E('the app against a real PostgREST', () => {
       expect(loaded.playbooks).toEqual([]);
       expect(loaded.mine).toEqual([]);
       expect([...loaded.transfer.keys()]).toEqual([]);
+    });
+  });
+
+  describe('export and deletion', () => {
+    it('returns the sensitive half through the real API', async () => {
+      // §3.5's "export includes it", proved at the boundary a browser actually uses. A DB test
+      // can prove the function returns it; only this proves it survives PostgREST's JSON.
+      h.become(memberA);
+      const doc = await fetchExport();
+
+      expect(Array.isArray(doc['sitreps'])).toBe(true);
+      expect((doc['bottom_g_tactics'] as unknown[]).length).toBeGreaterThan(0);
+      expect((doc['money_entries'] as unknown[]).length).toBeGreaterThan(0);
+      expect(doc['profile']).toBeTruthy();
+    });
+
+    it('names the file from the server’s clock, not the browser’s', async () => {
+      // The export is a record of what the server held. Stamping it with the reader's clock
+      // would be a small lie about when.
+      h.become(memberA);
+      const doc = await fetchExport();
+      expect(exportFilename(doc)).toMatch(/^escape-the-matrix-\d{4}-\d{2}-\d{2}\.json$/);
+    });
+
+    it('gives one man nothing of another’s', async () => {
+      h.become(peerA);
+      const doc = await fetchExport();
+      expect(doc['bottom_g_tactics']).toEqual([]);
+      expect(doc['money_entries']).toEqual([]);
+    });
+
+    it('refuses a deletion without the confirming address', async () => {
+      h.become(peerA);
+      await expect(deleteAccount('not-his@example.com')).rejects.toBeTruthy();
+
+      const { rows } = await h.db.query<{ n: string }>(
+        `select count(*)::text as n from public.profiles where id = $1`,
+        [peerA.id],
+      );
+      expect(rows[0]?.n, 'a refused deletion still erased him').toBe('1');
+    });
+
+    it('erases him when he confirms, leaving nothing behind', async () => {
+      // Run last in this block on purpose: it destroys the actor.
+      h.become(peerA);
+      await expect(deleteAccount(peerA.email)).resolves.toBeUndefined();
+
+      const { rows } = await h.db.query<{ n: string }>(
+        `select (select count(*) from auth.users where id = $1)
+              + (select count(*) from public.profiles where id = $1) as n`,
+        [peerA.id],
+      );
+      expect(rows[0]?.n).toBe('0');
     });
   });
 

@@ -285,7 +285,7 @@ would be rejected. `FORCE` is not load-bearing here: application traffic arrives
 
 ---
 
-## 5. Known gaps — current as of Phase 4
+## 5. Known gaps — current as of Phase 9
 
 Stated rather than implied, because a gap nobody wrote down becomes a gap nobody fixes.
 
@@ -299,16 +299,17 @@ phase it was last checked against.
 
 **Open:**
 
-- **No rate limiting on auth.** Phase 9. Supabase applies its own defaults; nothing here
-  adds to them.
-- **No dependency audit in CI.** Phase 9. `npm audit` reports 0 vulnerabilities across 308
-  packages, checked by hand at the Phase 4 gate — which is exactly the manual step Phase 9
-  is meant to remove.
-- **Protocol detail is not scrubbed at an egress boundary.** Phase 9, and see §2. Nothing
-  is currently at risk because no analytics service, error reporter or log aggregator is
-  wired up: the only egress today is `console.error` in the error boundary and the auth
-  provider, which stays on the member's own device. The scrubbing and its test must land
-  *with* the first reporter, not after it.
+- **Rate limiting on auth is GoTrue's, and cannot be ours.** Assessed at the Phase 9 gate
+  and left as it is, deliberately. Sign-in, signup and password reset go from the browser
+  straight to Supabase's auth service; there is no server of this project's in that path.
+  A throttle in `AuthProvider` would be **decoration in the §1 sense** — anyone can skip the
+  bundle and call the same endpoint with the anon key, which is public. Building one would
+  add the appearance of a control without the control.
+  What actually protects the account surface: GoTrue's own per-IP and per-email limits, and
+  **invite-only signup enforced by a `BEFORE INSERT` trigger on `auth.users`** — so a
+  credential-stuffing run against signup cannot create an account no matter how many attempts
+  it gets. Password *guessing* against an existing address remains GoTrue's problem, and it
+  is the right owner for it.
 - **GoTrue is not covered by an automated test.** `tests/api` drives real PostgREST, so
   every RLS policy and every read and write path is exercised against the real API. Signup,
   the two auth triggers, password recovery and §3.7's ordering are covered only by the
@@ -317,6 +318,25 @@ phase it was last checked against.
 - **No offline shell before Phase 8.** Closed — `public/sw.js`. It caches the app shell only
   and never a Supabase response: a cached protocol result would leave special-category data on
   disk, unencrypted, surviving sign-out, somewhere `clearUserState` cannot reach.
+
+- **`npm audit` runs in CI.** Closed at Phase 9 — a `--audit-level=high` gate in the verify
+  job. `high` rather than `moderate` because a red pipeline people learn to ignore protects
+  nothing; dev dependencies are included, because a compromised build-time package ships
+  whatever it likes into the bundle every member loads.
+- **Protocol detail cannot reach a third party.** Closed at Phase 9 — `src/lib/egress.ts`.
+  Built before there is anything to send, because the note this replaces said the scrubbing
+  "must land *with* the first reporter, not after it", and the only way to guarantee that is
+  for the door to exist first.
+  It **constructs** the payload rather than filtering one: a redaction pass that deletes
+  sensitive keys is a denylist, and a denylist is wrong the moment somebody adds a column.
+  What a reporter can ever receive is an error class, a SQLSTATE, one of this repository's own
+  identifiers, a route *shape*, and a list of React component names. Not the message, not
+  `details` — which is where PostgREST puts `Failing row contains ('Ten sales calls')` — and
+  nothing a member typed.
+  `tests/unit/egress.test.ts` plants ten real member strings in every field a careless
+  reporter would send and asserts none survives. `tests/unit/import-graph.test.ts` fails if
+  any module outside `lib/egress.ts` imports a reporter SDK, which is what makes it the only
+  door rather than the intended one.
 
 **Closed since Phase 0:**
 

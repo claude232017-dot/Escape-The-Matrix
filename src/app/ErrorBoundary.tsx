@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { describeCrash } from '@/app/crash-report';
+import { report } from '@/lib/egress';
 
 /**
  * The last line before a white page.
@@ -34,7 +35,17 @@ export class ErrorBoundary extends Component<Props, State> {
   override componentDidCatch(error: unknown, info: ErrorInfo): void {
     // The console is the only place the component stack survives, and it is what turns "it
     // broke" into a file and a line.
+    // Everything, on his own device: this is what turns "it says the server gave no reason"
+    // into a diagnosis, it is his own data, and §3.5 is about third parties.
     console.error('[crash]', error, info.componentStack);
+
+    // And the scrubbed shape, through the one door a reporter may ever be wired to. Nothing is
+    // sent today — see lib/egress.ts — but the call site exists so that adding one is a change
+    // inside that function rather than a vendor SDK dropped into a component.
+    report(error, {
+      pathname: typeof window === 'undefined' ? '/' : window.location.pathname,
+      componentStack: info.componentStack,
+    });
   }
 
   override render(): ReactNode {

@@ -211,4 +211,50 @@ describe('module graph', () => {
     const tokens = graph.get(join(SRC, 'design/tokens.ts'));
     expect(tokens).toEqual([]);
   });
+
+  it('keeps a reporter SDK behind the egress boundary', () => {
+    // §3.5: protocol detail must never reach a third party. `src/lib/egress.ts` is the door,
+    // and this is what makes it the *only* one — a rule about the import graph rather than a
+    // convention somebody remembers.
+    //
+    // The realistic failure is not malice. It is somebody adding Sentry on a Friday, calling
+    // `Sentry.captureException(error)` in a component because that is what the docs show, and
+    // sending a Postgres error whose `details` line reads "Failing row contains ('Ten sales
+    // calls before Friday')". This fails that diff.
+    const REPORTER_PACKAGES = [
+      '@sentry',
+      'sentry',
+      'bugsnag',
+      '@bugsnag',
+      'rollbar',
+      'logrocket',
+      'posthog',
+      'mixpanel',
+      '@datadog',
+      'datadog',
+      'newrelic',
+      '@amplitude',
+      'amplitude',
+    ];
+
+    const allowed = join(SRC, 'lib/egress.ts');
+    const violations: string[] = [];
+
+    for (const file of files) {
+      if (file === allowed) continue;
+      for (const specifier of importSpecifiers(readFileSync(file, 'utf8'))) {
+        const bare = specifier.startsWith('@')
+          ? specifier.split('/').slice(0, 2).join('/')
+          : (specifier.split('/')[0] ?? '');
+        if (REPORTER_PACKAGES.some((pkg) => bare === pkg || bare.startsWith(`${pkg}/`))) {
+          violations.push(`${rel(file)} → ${specifier}`);
+        }
+      }
+    }
+
+    expect(
+      violations,
+      'a reporter SDK is imported outside lib/egress.ts; route it through report() instead',
+    ).toEqual([]);
+  });
 });

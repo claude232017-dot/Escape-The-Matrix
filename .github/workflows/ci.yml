@@ -37,6 +37,18 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # Phase 9. Previously a manual step at each phase gate, which is a step that gets skipped
+      # under pressure — exactly when a dependency advisory matters most.
+      #
+      # `high` rather than `moderate`: this app has no server of its own, a tiny dependency tree
+      # and twelve users, so a moderate advisory in a build-time package is not worth a red
+      # pipeline that people learn to ignore. A high or critical one is.
+      #
+      # `--omit=dev` is deliberately NOT passed. A compromised build-time dependency ships
+      # whatever it likes into the bundle every member loads.
+      - name: Dependency audit
+        run: npm audit --audit-level=high
+
       - name: Unit tests
         run: npm test
 

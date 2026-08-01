@@ -10,9 +10,11 @@ import { useForgeData } from '@/features/forge/use-forge-data';
 import { LedgerScreen } from '@/features/ledger/components/LedgerScreen';
 import { WeekScreen } from '@/features/week/components/WeekScreen';
 import { CommanderScreen } from '@/features/command/components/CommanderScreen';
+import { PlaybookScreen } from '@/features/playbooks/components/PlaybookScreen';
 import { useLedgerData } from '@/features/ledger/use-ledger-data';
 import { useWeekData } from '@/features/week/use-week-data';
 import { useCommandData } from '@/features/command/use-command-data';
+import { usePlaybookData } from '@/features/playbooks/use-playbook-data';
 import { Button } from '@/ui/Button';
 import { TabPanel, Tabs } from '@/ui/Tabs';
 
@@ -41,6 +43,7 @@ export function SignedInShell() {
   const ledger = useLedgerData(profile?.id ?? '', profile?.timezone ?? 'UTC');
   const week = useWeekData(profile?.id ?? '', profile?.timezone ?? 'UTC');
   const command = useCommandData(profile?.id ?? '', profile?.timezone ?? 'UTC');
+  const playbooks = usePlaybookData(profile?.id ?? '', profile?.timezone ?? 'UTC');
 
   if (!profile) return null; // Unreachable: AuthGate only renders this in the 'app' view.
 
@@ -78,6 +81,7 @@ export function SignedInShell() {
               { value: 'week', label: 'Week' },
               { value: 'intel', label: 'Intel' },
               { value: 'command', label: 'Command' },
+              { value: 'playbooks', label: 'Playbooks' },
               { value: 'circle', label: 'Circle' },
             ]}
           >
@@ -143,6 +147,15 @@ export function SignedInShell() {
                 data={command}
                 isMentor={profile.role === 'mentor'}
                 profileId={profile.id}
+              />
+            </TabPanel>
+
+            <TabPanel value="playbooks">
+              <PlaybookScreen
+                data={playbooks}
+                profileId={profile.id}
+                circleId={profile.circleId}
+                isMentor={profile.role === 'mentor'}
               />
             </TabPanel>
 

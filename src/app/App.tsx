@@ -33,6 +33,7 @@ const SITREP_HARNESS_PATH = '/harness/sitrep';
 const LEDGER_HARNESS_PATH = '/harness/ledger';
 const WEEK_HARNESS_PATH = '/harness/week';
 const COMMAND_HARNESS_PATH = '/harness/command';
+const PLAYBOOK_HARNESS_PATH = '/harness/playbooks';
 
 const SitrepHarness = HARNESS_ENABLED
   ? lazy(() =>
@@ -58,8 +59,21 @@ const CommandHarness = HARNESS_ENABLED
     )
   : null;
 
+const PlaybookHarness = HARNESS_ENABLED
+  ? lazy(() =>
+      import('@/app/harness/PlaybookHarness').then((m) => ({ default: m.PlaybookHarness })),
+    )
+  : null;
+
 export function App() {
-  if (HARNESS_ENABLED && SitrepHarness && LedgerHarness && WeekHarness && CommandHarness) {
+  if (
+    HARNESS_ENABLED &&
+    SitrepHarness &&
+    LedgerHarness &&
+    WeekHarness &&
+    CommandHarness &&
+    PlaybookHarness
+  ) {
     const path = window.location.pathname;
     const Harness =
       path === SITREP_HARNESS_PATH
@@ -70,7 +84,9 @@ export function App() {
             ? WeekHarness
             : path === COMMAND_HARNESS_PATH
               ? CommandHarness
-              : null;
+              : path === PLAYBOOK_HARNESS_PATH
+                ? PlaybookHarness
+                : null;
     if (Harness) {
       return (
         <ErrorBoundary>

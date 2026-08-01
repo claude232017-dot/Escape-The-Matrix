@@ -39,8 +39,9 @@ const MARKERS = [
   'etm-ledger-harness-fixture',
   'etm-week-harness-fixture',
   'etm-command-harness-fixture',
+  'etm-playbook-harness-fixture',
 ];
-const ROUTES = ['/harness/sitrep', '/harness/ledger', '/harness/week', '/harness/command'];
+const ROUTES = ['/harness/sitrep', '/harness/ledger', '/harness/week', '/harness/command', '/harness/playbooks'];
 const CODE_EXTENSIONS = ['.js', '.mjs', '.cjs', '.css', '.html'];
 
 let outDir: string | null = null;

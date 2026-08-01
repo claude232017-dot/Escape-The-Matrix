@@ -273,13 +273,32 @@ Split by audience, like the debrief (ADR-013): **effort is circle-readable, amou
 - `directives_not_self` — a mentor writing to himself is a note, and §9 rules out the private
   journal.
 
-### Command — Phase 7
+### Shipped in Phase 7 — playbooks
+
+- **`playbooks`** — `circle_id`, `promoted_from` (a `debriefs` id, **ON DELETE SET NULL**),
+  `promoted_by`, `title`, `body` (both `public.capped_text_140`), `protocol_id`, `is_active`.
+  Circle-readable. **Mentor-curated**: twelve men over thirty days produce hundreds of
+  insights, and self-promotion would make the catalogue a feed and promoting a status move.
+- Text is immutable; only `is_active` is granted for UPDATE, so "retire" is the sole edit.
+  Men are working from the words as written.
+- `playbooks_one_per_source` — promoting the same insight twice splits its own transfer
+  evidence between two rows.
+- **`playbook_applications`** — `playbook_id`, `profile_id`, `adopted_on`, `outcome`
+  (`pending` | `held` | `did_not`), `resolved_at`. **Self and mentor only, like money.** The
+  enrollment disclosure never told a member his peers would see which systems failed for him.
+  One per man per playbook, so nobody moves a transfer rate alone. A settled application
+  cannot be deleted — that is how the evidence disappears.
+- **`public.playbook_transfer()`** — adoption counts per playbook for the caller's circle.
+  SECURITY DEFINER precisely so it can count rows the caller may not read; takes no arguments
+  and returns no profile id, so there is no way to ask it about a particular man.
+
+### Command — later
+
 
 - **`weekly_reviews`** — `profile_id`, `week_start`, three capped structured fields, plus a
   **snapshot of the computed numbers**. Not optional: recomputing history from live
   definitions means a man's past weeks silently change when the mentor edits the protocol
   list. Store what was true at the time.
-- **`playbooks`** / **`playbook_applications`**.
 
 ---
 

@@ -6,6 +6,12 @@ import { sendBusinessDay, sendMoneyEntry, sendVenture } from '@/features/ledger/
 import { loadWeek } from '@/features/week/use-week-data';
 import { loadCommand } from '@/features/command/use-command-data';
 import { sendDirective } from '@/features/command/directive-write';
+import { loadPlaybooks } from '@/features/playbooks/use-playbook-data';
+import {
+  adoptPlaybook,
+  answerApplication,
+  promotePlaybook,
+} from '@/features/playbooks/playbook-write';
 import {
   sendCommitments,
   sendSettlement,
@@ -550,6 +556,87 @@ describeE2E('the app against a real PostgREST', () => {
           body: 'Do as I say',
         }),
       ).rejects.toBeTruthy();
+    });
+  });
+
+  describe('playbooks', () => {
+    let playbookId: string;
+
+    it('lets the mentor promote one and the circle read it', async () => {
+      h.become(mentorA);
+      await expect(
+        promotePlaybook({
+          circleId: circleA,
+          promotedBy: mentorA.id,
+          promotedFrom: null,
+          title: 'Clothes out the night before',
+          body: 'Lay the kit out before bed so the morning has no decision in it',
+        }),
+      ).resolves.toBeUndefined();
+
+      h.become(peerA);
+      const loaded = await loadPlaybooks();
+      expect(loaded.playbooks.map((p) => p.title)).toEqual(['Clothes out the night before']);
+      playbookId = loaded.playbooks[0]!.id;
+    });
+
+    it('refuses a member promoting one', async () => {
+      h.become(memberA);
+      await expect(
+        promotePlaybook({
+          circleId: circleA,
+          promotedBy: memberA.id,
+          promotedFrom: null,
+          title: 'Mine',
+          body: 'My system',
+        }),
+      ).rejects.toBeTruthy();
+    });
+
+    it('lets two men adopt and answer', async () => {
+      h.become(memberA);
+      await adoptPlaybook({ playbookId, profileId: memberA.id, adoptedOn: today });
+      let mine = (await loadPlaybooks()).mine;
+      await answerApplication({ applicationId: mine[0]!.id, outcome: 'held' });
+
+      h.become(peerA);
+      await adoptPlaybook({ playbookId, profileId: peerA.id, adoptedOn: today });
+      mine = (await loadPlaybooks()).mine;
+      await answerApplication({ applicationId: mine[0]!.id, outcome: 'did_not' });
+    });
+
+    it('shows a man the counts without showing him whose failure it was', async () => {
+      // The line the whole feature is built around, proved through a real PostgREST: zero
+      // application rows for another man, and a correct total, from the same session.
+      h.become(peerA);
+      const loaded = await loadPlaybooks();
+
+      expect(loaded.mine, 'a peer saw more than his own application').toHaveLength(1);
+      expect(loaded.mine[0]?.playbookId).toBe(playbookId);
+
+      const counts = loaded.transfer.get(playbookId);
+      expect(counts).toEqual({
+        playbookId,
+        adopted: 2,
+        held: 1,
+        didNot: 1,
+        pending: 0,
+      });
+    });
+
+    it('refuses a second adoption by the same man', async () => {
+      h.become(memberA);
+      await expect(
+        adoptPlaybook({ playbookId, profileId: memberA.id, adoptedOn: today }),
+      ).rejects.toBeTruthy();
+    });
+
+    it('gives another circle nothing, catalogue and counts alike', async () => {
+      h.become(outsider);
+      const loaded = await loadPlaybooks();
+      expect(loaded.playbooks).toEqual([]);
+      expect(loaded.mine).toEqual([]);
+      expect([...loaded.transfer.keys()]).toEqual([]);
     });
   });
 

@@ -191,6 +191,7 @@ describe('module graph', () => {
       'features/ledger/components/LedgerScreen.tsx',
       'features/week/components/WeekScreen.tsx',
       'features/command/components/CommanderScreen.tsx',
+      'features/playbooks/components/PlaybookScreen.tsx',
     ];
     const violations: string[] = [];
     for (const file of noFetching) {

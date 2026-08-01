@@ -105,7 +105,7 @@ describeDb('database security posture', () => {
     expect(rows).toHaveLength(1);
     // Bumped by the latest migration. Asserting the exact number rather than ">= 1" so
     // that a migration which forgets to bump it is caught here.
-    expect(rows[0]?.schema_version).toBe(8);
+    expect(rows[0]?.schema_version).toBe(9);
     expect(rows[0]?.doctrine_version).toBe('2026.07-draft');
   });
 
@@ -116,6 +116,7 @@ describeDb('database security posture', () => {
     // unless a migration explicitly revokes it. This list is the review gate.
     const ALLOWED_RPCS = [
       'declare_commitments',
+      'file_weekly_review',
       'file_business_day',
       'file_debrief',
       'file_sitrep',
@@ -171,6 +172,40 @@ describeDb('database security posture', () => {
       'public.capped_text_140',
       'public.currency_code',
     ]);
+  });
+
+  it('makes every view in public run as the caller, not as its owner', async () => {
+    // The quietest RLS bypass available in Postgres, and Phase 6 introduced the first view, so
+    // the rule is asserted from the first one rather than after the second.
+    //
+    // A view executes with its *owner's* privileges by default. The owner here is the migration
+    // runner, so a plain view over `money_entries` evaluates that table's policies as the owner
+    // and hands every member every other member's revenue — while every policy underneath it
+    // remains perfectly correct. No error, no empty screen, nothing to notice. It just answers.
+    //
+    // `security_invoker = on` makes it run as the querying role instead. This asserts it on
+    // every view, so the next one cannot arrive without it.
+    const { rows } = await client.query<{ relname: string; invoker: string | null }>(
+      `select c.relname,
+              (select option_value from pg_options_to_table(c.reloptions)
+                where option_name = 'security_invoker') as invoker
+         from pg_class c
+         join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = 'public' and c.relkind = 'v'
+        order by c.relname`,
+    );
+
+    const leaky = rows
+      .filter((r) => (r.invoker ?? '').toLowerCase() !== 'on')
+      .map((r) => r.relname);
+    expect(
+      leaky,
+      `views in public that run as their owner and therefore bypass RLS: ${leaky.join(', ')}`,
+    ).toEqual([]);
+
+    // And the resolver itself is checked, so a query that started returning nothing cannot make
+    // the assertion above vacuous.
+    expect(rows.map((r) => r.relname)).toContain('member_days');
   });
 
   it('enables row-level security on every table in public', async () => {

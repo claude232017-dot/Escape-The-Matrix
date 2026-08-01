@@ -188,6 +188,15 @@ describeDb('every table, every verb', () => {
       [memberA],
     );
 
+    // A filed review. Written directly rather than through the RPC because that function
+    // refuses until the week is over and every commitment is answered — correct behaviour, and
+    // more setup than this sweep needs to prove isolation.
+    await client.query(
+      `insert into public.weekly_reviews (profile_id, week_start, what_worked, snapshot)
+       values ($1, app.week_start_for($1) - 7, 'Shipped it', '{"days_held": 5}'::jsonb)`,
+      [memberA],
+    );
+
     const { rows } = await client.query<{ tablename: string }>(
       `select tablename from pg_tables where schemaname = 'public' order by tablename`,
     );

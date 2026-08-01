@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { PHASE, PHASE_LABEL } from '@/app/build-info';
 import { CampaignHeader } from '@/app/CampaignHeader';
 import { DisclosurePanel } from '@/app/DisclosurePanel';
-import { useAuth } from '@/features/auth/AuthProvider';
+import { useAuth } from '@/features/auth/auth-context';
 import { InvitePanel } from '@/features/circle/components/InvitePanel';
 import { ProfileScreen } from '@/features/profile/components/ProfileScreen';
 import { ForgeScreen, type ForgeView } from '@/features/forge/components/ForgeScreen';
@@ -139,7 +139,11 @@ export function SignedInShell() {
               {/* Every member sees this. What differs is what the *database* returns him:
                   member_days is security_invoker, so a peer's rows arrive with the money
                   already blanked. The tab is not a permission. */}
-              <CommanderScreen data={command} isMentor={profile.role === 'mentor'} />
+              <CommanderScreen
+                data={command}
+                isMentor={profile.role === 'mentor'}
+                profileId={profile.id}
+              />
             </TabPanel>
 
             <TabPanel value="circle">

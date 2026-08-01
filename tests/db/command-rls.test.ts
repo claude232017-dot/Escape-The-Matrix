@@ -418,4 +418,173 @@ describeDb('the Commander’s View', () => {
       });
     });
   });
+  describe('mentor_directives', () => {
+    async function write(author: Actor, subject: Actor, body: string): Promise<unknown[]> {
+      return asMember(author, (query) =>
+        query(
+          `insert into public.mentor_directives (author_id, subject_id, week_start, body)
+           values ($1, $2, $3::date, $4) returning id`,
+          [author.id, subject.id, monday, body],
+        ),
+      );
+    }
+
+    it('lets the mentor write one to a man in his circle', async () => {
+      const rows = await write(mentorA, memberA, 'Ten offers before Friday. No exceptions.');
+      expect(rows).toHaveLength(1);
+    });
+
+    it('refuses a member writing one at all', async () => {
+      // app.is_mentor() is the gate, and it is in the policy rather than in the UI — the
+      // Command tab renders for everyone.
+      await asMember(peerA, async (query) => {
+        await expect(
+          query(
+            `insert into public.mentor_directives (author_id, subject_id, week_start, body)
+             values ($1, $2, $3::date, 'Do as I say')`,
+            [peerA.id, memberA.id, monday],
+          ),
+        ).rejects.toThrow(/row-level security|violates/);
+      });
+    });
+
+    it('refuses a mentor addressing another circle', async () => {
+      // The clause app.is_mentor() alone would not supply. A mentor is a mentor of *his* circle.
+      await asMember(mentorA, async (query) => {
+        await expect(
+          query(
+            `insert into public.mentor_directives (author_id, subject_id, week_start, body)
+             values ($1, $2, $3::date, 'Not yours to instruct')`,
+            [mentorA.id, memberB.id, monday],
+          ),
+        ).rejects.toThrow(/row-level security|violates/);
+      });
+    });
+
+    it('refuses a directive addressed to himself', async () => {
+      await expect(
+        client.query(
+          `insert into public.mentor_directives (author_id, subject_id, week_start, body)
+           values ($1, $1, $2::date, 'Note to self')`,
+          [mentorA.id, monday],
+        ),
+      ).rejects.toThrow(/directives_not_self/);
+    });
+
+    it('allows one per man per week and refuses a second', async () => {
+      // The constraint that stops this becoming a feed. Saying something else means replacing
+      // what he said, which is a different act from adding to it.
+      await client.query(
+        `insert into public.mentor_directives (author_id, subject_id, week_start, body)
+         values ($1, $2, $3::date, 'First')`,
+        [mentorA.id, memberA.id, monday],
+      );
+      await expect(
+        client.query(
+          `insert into public.mentor_directives (author_id, subject_id, week_start, body)
+           values ($1, $2, $3::date, 'Second')`,
+          [mentorA.id, memberA.id, monday],
+        ),
+      ).rejects.toThrow(/directives_one_per_subject_week/);
+      await client.query(`delete from public.mentor_directives`);
+    });
+
+    it('shows it to the subject and to the author, and to nobody else', async () => {
+      // The one place in this schema where the circle is deliberately shut out of something
+      // about a member: a directive everyone can read is a public correction, and a public
+      // correction is a thing a man defends himself against rather than acts on.
+      await client.query(
+        `insert into public.mentor_directives (author_id, subject_id, week_start, body)
+         values ($1, $2, $3::date, 'Ten offers before Friday')`,
+        [mentorA.id, memberA.id, monday],
+      );
+
+      const bySubject = await asMember(memberA, (query) =>
+        query(`select body from public.mentor_directives`),
+      );
+      expect(bySubject, 'the subject could not read his own directive').toHaveLength(1);
+
+      const byAuthor = await asMember(mentorA, (query) =>
+        query(`select body from public.mentor_directives`),
+      );
+      expect(byAuthor).toHaveLength(1);
+
+      const byPeer = await asMember(peerA, (query) =>
+        query(`select * from public.mentor_directives`).catch(() => []),
+      );
+      expect(byPeer, 'a peer read a directive that was not his').toEqual([]);
+
+      const byAnon = await asMember(null, (query) =>
+        query(`select * from public.mentor_directives`).catch(() => []),
+      );
+      expect(byAnon).toEqual([]);
+
+      await client.query(`delete from public.mentor_directives`);
+    });
+
+    it('cannot be edited in place, only replaced', async () => {
+      // A directive amended after the man has read it means the two of them remember different
+      // instructions, and only one of them can check. There is no UPDATE policy at all, so the
+      // absence is the enforcement.
+      await client.query(
+        `insert into public.mentor_directives (author_id, subject_id, week_start, body)
+         values ($1, $2, $3::date, 'Original')`,
+        [mentorA.id, memberA.id, monday],
+      );
+      // Refused by the *grant*, not by a policy — UPDATE is simply not in the grant list, so
+      // the privilege system rejects it before RLS is consulted. That is the stronger of the
+      // two guarantees: a policy can be widened by accident, and a missing privilege has to be
+      // granted on purpose.
+      await asMember(mentorA, async (query) => {
+        await expect(
+          query(`update public.mentor_directives set body = 'Softened'`),
+          'a directive was edited in place',
+        ).rejects.toThrow(/permission denied/);
+      });
+      await client.query(`delete from public.mentor_directives`);
+    });
+
+    it('lets the author withdraw one and the subject not', async () => {
+      await client.query(
+        `insert into public.mentor_directives (author_id, subject_id, week_start, body)
+         values ($1, $2, $3::date, 'Withdrawable')`,
+        [mentorA.id, memberA.id, monday],
+      );
+
+      const bySubject = await asMember(memberA, (query) =>
+        query(`delete from public.mentor_directives returning id`),
+      );
+      expect(bySubject, 'the subject deleted his own directive').toEqual([]);
+
+      const byAuthor = await asMember(mentorA, (query) =>
+        query(`delete from public.mentor_directives returning id`),
+      );
+      expect(byAuthor).toHaveLength(1);
+      await client.query(`delete from public.mentor_directives`);
+    });
+
+    it('has no reply column, because a reply is the whole of a chat app', () => {
+      // Asserted on the shape rather than left to restraint. §1 rules out chat, and the
+      // difference between a directive and a message is exactly this absence.
+      return client
+        .query<{ attname: string }>(
+          `select a.attname from pg_attribute a
+             join pg_class c on c.oid = a.attrelid
+             join pg_namespace n on n.oid = c.relnamespace
+            where n.nspname = 'public' and c.relname = 'mentor_directives'
+              and a.attnum > 0 and not a.attisdropped
+            order by a.attnum`,
+        )
+        .then(({ rows }) => {
+          expect(rows.map((r) => r.attname)).toEqual([
+            'id',
+            'author_id',
+            'subject_id',
+            'week_start',
+            'body',
+            'created_at',
+          ]);
+        });
+    });
+  });
 });

@@ -1,5 +1,13 @@
+import { useCallback, useState } from 'react';
+import { startOfWeek } from '@/lib/date';
 import { needsAttention, type Standing } from '@/features/command/correlation';
 import { CorrelationPanel } from '@/features/command/components/CorrelationPanel';
+import { DirectivePanel } from '@/features/command/components/DirectivePanel';
+import {
+  directiveRefusalMessage,
+  sendDirective,
+  withdrawDirective,
+} from '@/features/command/directive-write';
 import type { CommandData } from '@/features/command/use-command-data';
 
 /**
@@ -23,10 +31,53 @@ import type { CommandData } from '@/features/command/use-command-data';
 export interface CommanderScreenProps {
   data: CommandData;
   isMentor: boolean;
+  /** The signed-in man. Needed to tell his own directives from the ones he wrote. */
+  profileId: string;
 }
 
-export function CommanderScreen({ data, isMentor }: CommanderScreenProps) {
-  const { loaded, error } = data;
+export function CommanderScreen({ data, isMentor, profileId }: CommanderScreenProps) {
+  const { loaded, error, localDate, reload } = data;
+  const [refusal, setRefusal] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  // Written straight rather than through the outbox — see directive-write.ts. A queued
+  // instruction that lands next Tuesday is an instruction about a week that has finished.
+  const onSend = useCallback(
+    async (subjectId: string, body: string) => {
+      setBusy(true);
+      setRefusal(null);
+      try {
+        await sendDirective({
+          authorId: profileId,
+          subjectId,
+          weekStart: startOfWeek(localDate),
+          body,
+        });
+        reload();
+      } catch (cause) {
+        setRefusal(directiveRefusalMessage(cause));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [profileId, localDate, reload],
+  );
+
+  const onWithdraw = useCallback(
+    async (id: string) => {
+      setBusy(true);
+      setRefusal(null);
+      try {
+        await withdrawDirective(id);
+        reload();
+      } catch (cause) {
+        setRefusal(directiveRefusalMessage(cause));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [reload],
+  );
 
   if (error) {
     return (
@@ -140,6 +191,18 @@ export function CommanderScreen({ data, isMentor }: CommanderScreenProps) {
           </p>
         ) : null}
       </section>
+
+      <DirectivePanel
+        directives={loaded.directives}
+        standings={loaded.standings}
+        profileId={profileId}
+        weekStart={startOfWeek(localDate)}
+        isMentor={isMentor}
+        refusal={refusal}
+        busy={busy}
+        onSend={(subjectId, body) => void onSend(subjectId, body)}
+        onWithdraw={(id) => void onWithdraw(id)}
+      />
 
       {/* His own correlation, on the same screen. The mentor is a man in the campaign too. */}
       <CorrelationPanel days={loaded.mine} />

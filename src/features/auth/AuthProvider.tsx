@@ -1,13 +1,4 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { getSupabase, isSupabaseConfigured } from '@/lib/supabase';
 import { clearUserState } from '@/lib/local-state';
@@ -21,50 +12,15 @@ import {
   isRecoveryUrl,
   stripRecoveryFromUrl,
 } from '@/features/auth/recovery';
-import { resolveAuthView, type AuthView } from '@/features/auth/view';
+import { resolveAuthView } from '@/features/auth/view';
 import { authErrorMessage } from '@/features/auth/error-message';
 import { DISCLOSURE_VERSION } from '@/features/auth/disclosure';
-
-export interface SignUpInput {
-  email: string;
-  password: string;
-  displayName: string;
-  /** Captured at signup because every future day count is measured against it. */
-  timezone: string;
-}
-
-export interface Profile {
-  id: string;
-  circleId: string;
-  displayName: string;
-  timezone: string;
-  role: 'mentor' | 'member';
-  /** His creed, shown inline by the Morning Protocol MED. Null when never written. */
-  topGCode: string | null;
-  commandPostNote: string | null;
-  fortressProtocol: string | null;
-  disclosureAcceptedAt: string | null;
-  disclosureVersion: string | null;
-}
-
-interface AuthContextValue {
-  view: AuthView;
-  session: Session | null;
-  profile: Profile | null;
-  /** Non-null when the last operation failed. Plain text, safe to show. */
-  error: string | null;
-  signIn: (email: string, password: string) => Promise<void>;
-  /** Resolves to whether the man must confirm his email before he can sign in. */
-  signUpWithInvitation: (input: SignUpInput) => Promise<{ needsEmailConfirmation: boolean }>;
-  signOut: () => Promise<void>;
-  requestPasswordReset: (email: string) => Promise<void>;
-  completePasswordReset: (newPassword: string) => Promise<void>;
-  acceptDisclosure: (version: string) => Promise<void>;
-  refreshProfile: () => Promise<void>;
-  busy: boolean;
-}
-
-const AuthContext = createContext<AuthContextValue | null>(null);
+import {
+  AuthContext,
+  type AuthContextValue,
+  type Profile,
+  type SignUpInput,
+} from '@/features/auth/auth-context';
 
 /**
  * Read synchronously, at module scope, before React renders anything.
@@ -402,10 +358,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-}
-
-export function useAuth(): AuthContextValue {
-  const context = useContext(AuthContext);
-  if (!context) throw new Error('useAuth must be used inside <AuthProvider>');
-  return context;
 }

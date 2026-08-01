@@ -197,6 +197,15 @@ describeDb('every table, every verb', () => {
       [memberA],
     );
 
+    // A directive from the mentor to member A. Visible to those two only, which is exactly
+    // what makes it worth sweeping: the outsider must get nothing, and so would a peer.
+    await client.query(
+      `insert into public.mentor_directives (author_id, subject_id, week_start, body)
+       select p.id, $1, app.week_start_for($1), 'Ten offers before Friday'
+         from public.profiles p where p.role = 'mentor' limit 1`,
+      [memberA],
+    );
+
     const { rows } = await client.query<{ tablename: string }>(
       `select tablename from pg_tables where schemaname = 'public' order by tablename`,
     );

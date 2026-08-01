@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Button } from '@/ui/Button';
-import { useAuth } from '@/features/auth/AuthProvider';
+import { useAuth } from '@/features/auth/auth-context';
 import { AuthShell, FormError } from '@/features/auth/components/AuthShell';
 import { DisclosureBody } from '@/features/auth/components/DisclosureBody';
 import { DISCLOSURE_VERSION } from '@/features/auth/disclosure';

@@ -32,6 +32,7 @@ const HARNESS_ENABLED = import.meta.env.VITE_TEST_HARNESS === '1';
 const SITREP_HARNESS_PATH = '/harness/sitrep';
 const LEDGER_HARNESS_PATH = '/harness/ledger';
 const WEEK_HARNESS_PATH = '/harness/week';
+const COMMAND_HARNESS_PATH = '/harness/command';
 
 const SitrepHarness = HARNESS_ENABLED
   ? lazy(() =>
@@ -51,8 +52,14 @@ const WeekHarness = HARNESS_ENABLED
     )
   : null;
 
+const CommandHarness = HARNESS_ENABLED
+  ? lazy(() =>
+      import('@/app/harness/CommandHarness').then((module) => ({ default: module.CommandHarness })),
+    )
+  : null;
+
 export function App() {
-  if (HARNESS_ENABLED && SitrepHarness && LedgerHarness && WeekHarness) {
+  if (HARNESS_ENABLED && SitrepHarness && LedgerHarness && WeekHarness && CommandHarness) {
     const path = window.location.pathname;
     const Harness =
       path === SITREP_HARNESS_PATH
@@ -61,7 +68,9 @@ export function App() {
           ? LedgerHarness
           : path === WEEK_HARNESS_PATH
             ? WeekHarness
-            : null;
+            : path === COMMAND_HARNESS_PATH
+              ? CommandHarness
+              : null;
     if (Harness) {
       return (
         <ErrorBoundary>

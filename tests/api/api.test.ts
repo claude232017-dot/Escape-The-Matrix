@@ -5,6 +5,7 @@ import { sendDebrief } from '@/features/forge/debrief-write';
 import { sendBusinessDay, sendMoneyEntry, sendVenture } from '@/features/ledger/ledger-write';
 import { loadWeek } from '@/features/week/use-week-data';
 import { loadCommand } from '@/features/command/use-command-data';
+import { sendDirective } from '@/features/command/directive-write';
 import {
   sendCommitments,
   sendSettlement,
@@ -499,6 +500,56 @@ describeE2E('the app against a real PostgREST', () => {
       expect(mine?.displayName).toBeTruthy();
       expect(mine?.lastReported).toBe(today);
       expect(mine?.daysSilent).toBe(0);
+    });
+  });
+
+  describe('mentor directives', () => {
+    it('lets the mentor write one and the subject read it', async () => {
+      const { rows } = await h.db.query<{ monday: string }>(
+        `select to_char(app.week_start_for($1), 'YYYY-MM-DD') as monday`,
+        [memberA.id],
+      );
+      const monday = rows[0]!.monday;
+
+      h.become(mentorA);
+      await expect(
+        sendDirective({
+          authorId: mentorA.id,
+          subjectId: memberA.id,
+          weekStart: monday,
+          body: 'Ten offers before Friday. No exceptions.',
+        }),
+      ).resolves.toBeUndefined();
+
+      h.become(memberA);
+      const asSubject = await loadCommand(memberA.id, today);
+      expect(asSubject.directives.map((d) => d.body)).toEqual([
+        'Ten offers before Friday. No exceptions.',
+      ]);
+    });
+
+    it('gives a peer nothing, because it is not the circle’s business', async () => {
+      // The one place in this schema where the circle is deliberately shut out of something
+      // about a member: a directive everyone can read is a public correction.
+      h.become(peerA);
+      const asPeer = await loadCommand(peerA.id, today);
+      expect(asPeer.directives, 'a peer read a directive that was not his').toEqual([]);
+    });
+
+    it('refuses a member writing one', async () => {
+      const { rows } = await h.db.query<{ monday: string }>(
+        `select to_char(app.week_start_for($1), 'YYYY-MM-DD') as monday`,
+        [memberA.id],
+      );
+      h.become(peerA);
+      await expect(
+        sendDirective({
+          authorId: peerA.id,
+          subjectId: memberA.id,
+          weekStart: rows[0]!.monday,
+          body: 'Do as I say',
+        }),
+      ).rejects.toBeTruthy();
     });
   });
 

@@ -1,5 +1,5 @@
 import { Button } from '@/ui/Button';
-import { useAuth } from '@/features/auth/AuthProvider';
+import { useAuth } from '@/features/auth/auth-context';
 import { AuthShell } from '@/features/auth/components/AuthShell';
 
 /**

@@ -13,12 +13,28 @@ import { daysSilent, type MemberDay, type Standing } from '@/features/command/co
  * decoration (§3.3) and would also be a second, drifting copy of the rule.
  */
 
+export interface Directive {
+  id: string;
+  authorId: string;
+  subjectId: string;
+  weekStart: string;
+  body: string;
+}
+
 export interface CommandLoaded {
   /** The signed-in man's own days. */
   mine: MemberDay[];
   /** Everyone's, him included. Money is blanked for anyone he may not see it for. */
   circle: MemberDay[];
   standings: Standing[];
+  /**
+   * Directives this reader is party to.
+   *
+   * RLS returns only the ones he wrote or was sent — author or subject, never the circle. So
+   * this array is already correctly scoped and nothing filters it here; a filter in TypeScript
+   * would be decoration (§3.3) and a second copy of the rule.
+   */
+  directives: Directive[];
 }
 
 export interface CommandData {
@@ -50,7 +66,7 @@ interface DayRow {
 export async function loadCommand(profileId: string, today: string): Promise<CommandLoaded> {
   const supabase = getSupabase();
 
-  const [dayResult, profileResult, commitmentResult] = await Promise.all([
+  const [dayResult, profileResult, commitmentResult, directiveResult] = await Promise.all([
     supabase
       .from('member_days')
       .select(
@@ -59,6 +75,10 @@ export async function loadCommand(profileId: string, today: string): Promise<Com
       .order('local_date', { ascending: false }),
     supabase.from('profiles').select('id, display_name'),
     supabase.from('commitments').select('profile_id, outcome').eq('outcome', 'pending'),
+    supabase
+      .from('mentor_directives')
+      .select('id, author_id, subject_id, week_start, body')
+      .order('week_start', { ascending: false }),
   ]);
 
   if (dayResult.error) throw new Error(dayResult.error.message);
@@ -106,10 +126,29 @@ export async function loadCommand(profileId: string, today: string): Promise<Com
     };
   });
 
+  const directives = (
+    (directiveResult.data ?? []) as {
+      id: string;
+      author_id: string;
+      subject_id: string;
+      week_start: string;
+      body: string;
+    }[]
+  ).map(
+    (r): Directive => ({
+      id: r.id,
+      authorId: r.author_id,
+      subjectId: r.subject_id,
+      weekStart: r.week_start,
+      body: r.body,
+    }),
+  );
+
   return {
     mine: days.filter((d) => d.profileId === profileId),
     circle: days,
     standings,
+    directives,
   };
 }
 

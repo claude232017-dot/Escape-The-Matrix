@@ -1,7 +1,7 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { Button } from '@/ui/Button';
 import { Field } from '@/ui/Field';
-import { useAuth } from '@/features/auth/AuthProvider';
+import { useAuth } from '@/features/auth/auth-context';
 import {
   PASSWORD_MIN_LENGTH,
   validateEmail,

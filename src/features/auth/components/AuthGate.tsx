@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { useAuth } from '@/features/auth/AuthProvider';
+import { useAuth } from '@/features/auth/auth-context';
 import { SignedOutScreens } from '@/features/auth/components/SignedOutScreens';
 import { ResetPasswordScreen } from '@/features/auth/components/ResetPasswordScreen';
 import { DisclosureScreen } from '@/features/auth/components/DisclosureScreen';

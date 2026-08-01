@@ -259,14 +259,26 @@ Split by audience, like the debrief (ADR-013): **effort is circle-readable, amou
 
 ## Planned
 
-### Command — Phases 6–7
+### Shipped with Phase 6 — `mentor_directives`
+
+- **`mentor_directives`** — `author_id`, `subject_id`, `week_start` (a Monday), `body`
+  (`public.capped_text_140`). **Visible to author and subject only** — the one place in this
+  schema where the circle is deliberately shut out of something about a member, because a
+  directive everyone can read is a public correction.
+- **One per author per subject per week**, by unique constraint. Saying something else means
+  withdrawing the first, which is a different act from adding to it.
+- **No reply column, and no UPDATE grant.** §1 rules out chat, and the difference between a
+  directive and a message is exactly that absence. An amendment is a withdrawal plus a new
+  one, which shows in `created_at` where an in-place edit would not.
+- `directives_not_self` — a mentor writing to himself is a note, and §9 rules out the private
+  journal.
+
+### Command — Phase 7
 
 - **`weekly_reviews`** — `profile_id`, `week_start`, three capped structured fields, plus a
   **snapshot of the computed numbers**. Not optional: recomputing history from live
   definitions means a man's past weeks silently change when the mentor edits the protocol
   list. Store what was true at the time.
-- **`mentor_directives`** — `author_id`, `subject_id`, `week_start`, `body` (capped).
-  Visible to author and subject only.
 - **`playbooks`** / **`playbook_applications`**.
 
 ---

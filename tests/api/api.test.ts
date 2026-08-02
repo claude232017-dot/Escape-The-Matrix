@@ -426,14 +426,35 @@ describeE2E('the app against a real PostgREST', () => {
       const loaded = await loadWeek(memberA.id, today);
       const target = loaded.current.commitments[0]!;
 
+      // Read the current outcome instead of assuming `pending`, and send something **different**
+      // from it. Both halves matter, and the second one is the important one.
+      //
+      // This test used to assume the row was pending and send `hit`. On a Sunday the test above
+      // legitimately settles this same commitment to `hit` first — settling is allowed once the
+      // week is over — so on one day in seven the assertion compared `hit` against `pending` and
+      // failed for a reason that had nothing to do with a peer.
+      //
+      // The false alarm is the mild half. The dangerous half is the inverse: with the row
+      // already `hit` and the peer also sending `hit`, a peer write that **succeeded** would
+      // leave the value identical and this test would have passed while RLS was wide open. An
+      // assertion that cannot observe the failure it is named after is worse than no assertion,
+      // because the suite reports it as covered.
+      const before = await h.db.query<{ outcome: string }>(
+        `select outcome::text from public.commitments where id = $1`,
+        [target.id],
+      );
+      const was = before.rows[0]?.outcome;
+      expect(was, 'the commitment vanished before the peer attempted anything').toBeDefined();
+      const different = was === 'hit' ? 'missed' : 'hit';
+
       h.become(peerA);
-      await sendSettlement({ id: target.id, outcome: 'hit' }).catch(() => undefined);
+      await sendSettlement({ id: target.id, outcome: different }).catch(() => undefined);
 
       const { rows } = await h.db.query<{ outcome: string }>(
         `select outcome::text from public.commitments where id = $1`,
         [target.id],
       );
-      expect(rows[0]?.outcome, 'a peer settled a commitment that was not his').toBe('pending');
+      expect(rows[0]?.outcome, 'a peer settled a commitment that was not his').toBe(was);
     });
 
     it('withdraws only what he declared today', async () => {

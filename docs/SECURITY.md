@@ -339,6 +339,19 @@ phase it was last checked against.
   any module outside `lib/egress.ts` imports a reporter SDK, which is what makes it the only
   door rather than the intended one.
 
+  **That guard was a denylist, and a denylist held it open.** Vercel's integration opened a PR
+  adding `<Analytics />` to `App.tsx`. `@vercel/analytics` was not among the named packages, so
+  the typecheck-lint-unit job passed. The only thing that failed was six browser tests asserting
+  no console errors — incidentally, because the injected script 404s under the local preview
+  server. Served with a 200 there, CI would have been green and this app would have shipped
+  per-visit reporting to a third party.
+
+  The rule is now inverted: **every bare specifier in `src/` must be named in an allowlist**,
+  and an unrecognised package fails whether or not anybody predicted it. The reporter denylist
+  survives alongside it only because it produces the specific message somebody adding Sentry
+  needs to read. Verified by replaying that PR's diff as a mutation — it now fails in the unit
+  job, before the browser suite runs.
+
 **Closed since Phase 0:**
 
 - ~~No auth.~~ Phase 1 — invite-only, enforced by a `BEFORE INSERT` trigger on

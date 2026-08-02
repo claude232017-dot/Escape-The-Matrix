@@ -187,14 +187,38 @@ describeDb('the Forge', () => {
   });
 
   describe('a client cannot choose what day it is', () => {
+    /**
+     * Today in the member's own timezone — never `current_date`.
+     *
+     * §3.1 in the place it is easiest to forget: a test. These three cases used `current_date`,
+     * which is the *database session's* today, and memberA lives in `America/New_York`. For the
+     * four hours between midnight UTC and midnight in New York the two disagree, so
+     * `current_date` is tomorrow as far as he is concerned and the constraint correctly rejects
+     * it. The suite passed twenty hours a day and failed for four — and it failed for the right
+     * reason, on the assertion whose whole subject is that the server does not decide what day
+     * it is for him.
+     *
+     * Computed through the admin connection rather than inside the member's own statement:
+     * ADR-011 — `authenticated` has no USAGE on schema `app`, so `app.today_for()` in a
+     * statement running as that role fails with permission denied. Reading it here and passing
+     * the answer as a value is also what the real client does.
+     */
+    async function todayFor(profileId: string): Promise<string> {
+      const { rows } = await client.query<{ today: string }>(
+        `select app.today_for($1)::text as today`,
+        [profileId],
+      );
+      return rows[0]!.today;
+    }
+
     it('refuses a SITREP for a day not yet lived', async () => {
       // Without this a man files thirty perfect days this afternoon and the dataset is fiction.
       await expect(
         asMember(
           memberA,
           `insert into public.sitreps (enrollment_id, local_date, final_status)
-           values ($1, current_date + 1, 'complete')`,
-          [enrollmentA],
+           values ($1, $2::date + 1, 'complete')`,
+          [enrollmentA, await todayFor(memberA.id)],
         ),
       ).rejects.toThrow(/sitrep_in_future/);
     });
@@ -204,8 +228,8 @@ describeDb('the Forge', () => {
         asMember(
           memberA,
           `insert into public.sitreps (enrollment_id, local_date, final_status)
-           values ($1, current_date - 20, 'complete')`,
-          [enrollmentA],
+           values ($1, $2::date - 20, 'complete')`,
+          [enrollmentA, await todayFor(memberA.id)],
         ),
       ).rejects.toThrow(/sitrep_before_enrollment/);
     });
@@ -214,8 +238,8 @@ describeDb('the Forge', () => {
       const rows = await asMember<{ local_date: Date }>(
         memberA,
         `insert into public.sitreps (enrollment_id, local_date, final_status)
-         values ($1, current_date, 'complete') returning local_date`,
-        [enrollmentA],
+         values ($1, $2::date, 'complete') returning local_date`,
+        [enrollmentA, await todayFor(memberA.id)],
       );
       expect(rows).toHaveLength(1);
     });

@@ -31,9 +31,75 @@ function walk(dir: string): string[] {
 const IMPORT_RE =
   /(?:^|\n)\s*(?:import|export)\s+(?:[\s\S]*?\sfrom\s+)?['"]([^'"]+)['"]|import\(\s*['"]([^'"]+)['"]\s*\)/g;
 
+/**
+ * Blank out comments, preserving offsets and line structure.
+ *
+ * `IMPORT_RE` matches `export … from '…'` with `[\s\S]*?` in the middle, so it happily spans
+ * newlines — which real multi-line imports need. The cost is that an `export` on one line pairs
+ * with the words `from "no attack"` in a comment thirty lines below, and reports a package
+ * called `no attack`.
+ *
+ * That was invisible while every bare specifier was discarded as "not a file in src". It stops
+ * being invisible the moment a rule cares about bare specifiers, which is what the allowlist
+ * below does. `tests/unit/service-worker.test.ts` hit the same class of bug — its own
+ * "NO skipWaiting() HERE" comment failed the check — and solved it the same way.
+ *
+ * Hand-scanned rather than regex-replaced because `'https://example.com'` contains `//` and a
+ * naive strip would truncate the string it lives in.
+ */
+function stripComments(source: string): string {
+  let out = '';
+  let i = 0;
+  while (i < source.length) {
+    const two = source.slice(i, i + 2);
+
+    if (two === '//') {
+      while (i < source.length && source[i] !== '\n') {
+        out += ' ';
+        i += 1;
+      }
+      continue;
+    }
+
+    if (two === '/*') {
+      while (i < source.length && source.slice(i, i + 2) !== '*/') {
+        // Newlines are kept so line-anchored parts of the pattern still behave.
+        out += source[i] === '\n' ? '\n' : ' ';
+        i += 1;
+      }
+      out += '  ';
+      i += 2;
+      continue;
+    }
+
+    const char = source[i] ?? '';
+    if (char === '"' || char === "'" || char === '`') {
+      const quote = char;
+      out += char;
+      i += 1;
+      while (i < source.length) {
+        const inner = source[i] ?? '';
+        out += inner;
+        i += 1;
+        if (inner === '\\') {
+          out += source[i] ?? '';
+          i += 1;
+          continue;
+        }
+        if (inner === quote) break;
+      }
+      continue;
+    }
+
+    out += char;
+    i += 1;
+  }
+  return out;
+}
+
 function importSpecifiers(source: string): string[] {
   const found: string[] = [];
-  for (const match of source.matchAll(IMPORT_RE)) {
+  for (const match of stripComments(source).matchAll(IMPORT_RE)) {
     const specifier = match[1] ?? match[2];
     if (specifier) found.push(specifier);
   }
@@ -78,6 +144,13 @@ const graph = new Map<string, string[]>(
 );
 
 const rel = (file: string): string => relative(SRC, file).replaceAll('\\', '/');
+
+/** `@scope/name/sub` → `@scope/name`; `name/sub` → `name`. */
+function packageOf(specifier: string): string {
+  return specifier.startsWith('@')
+    ? specifier.split('/').slice(0, 2).join('/')
+    : (specifier.split('/')[0] ?? '');
+}
 
 describe('module graph', () => {
   it('finds the source files it claims to be checking', () => {
@@ -221,6 +294,9 @@ describe('module graph', () => {
     // `Sentry.captureException(error)` in a component because that is what the docs show, and
     // sending a Postgres error whose `details` line reads "Failing row contains ('Ten sales
     // calls before Friday')". This fails that diff.
+    //
+    // Named packages only — see the allowlist below for the rule that actually holds. This one
+    // survives because it produces the *specific* message somebody adding Sentry needs to read.
     const REPORTER_PACKAGES = [
       '@sentry',
       'sentry',
@@ -235,6 +311,8 @@ describe('module graph', () => {
       'newrelic',
       '@amplitude',
       'amplitude',
+      '@vercel/analytics',
+      '@vercel/speed-insights',
     ];
 
     const allowed = join(SRC, 'lib/egress.ts');
@@ -243,9 +321,7 @@ describe('module graph', () => {
     for (const file of files) {
       if (file === allowed) continue;
       for (const specifier of importSpecifiers(readFileSync(file, 'utf8'))) {
-        const bare = specifier.startsWith('@')
-          ? specifier.split('/').slice(0, 2).join('/')
-          : (specifier.split('/')[0] ?? '');
+        const bare = packageOf(specifier);
         if (REPORTER_PACKAGES.some((pkg) => bare === pkg || bare.startsWith(`${pkg}/`))) {
           violations.push(`${rel(file)} → ${specifier}`);
         }
@@ -256,5 +332,92 @@ describe('module graph', () => {
       violations,
       'a reporter SDK is imported outside lib/egress.ts; route it through report() instead',
     ).toEqual([]);
+  });
+
+  /**
+   * Nothing third-party reaches the bundle without being declared here.
+   *
+   * ---------------------------------------------------------------------------
+   * Why this replaced a denylist
+   * ---------------------------------------------------------------------------
+   * The rule above is a list of packages somebody thought of. `@vercel/analytics` was not on
+   * it, so when Vercel's integration opened a PR adding `<Analytics />` to `App.tsx`, the
+   * typecheck-lint-unit job went **green**. The only thing that went red was six browser tests
+   * asserting no console errors — because the injected script 404s under the local preview
+   * server. Had it been served with a 200 there, CI would have passed clean and this app would
+   * be reporting every member's visit to a third party, from a product whose tables record
+   * sexual-discipline compliance and substance use against named individuals.
+   *
+   * A denylist is wrong the moment somebody ships a package nobody predicted, and that is the
+   * normal case rather than the exotic one — the diff arrived from a dashboard button, not from
+   * a developer. So the question is inverted: every bare specifier in `src/` must be named
+   * here, and an unrecognised one fails.
+   *
+   * Adding a dependency is then a deliberate line in this file rather than an `npm install`
+   * nobody reviews. That is the point; it is meant to be a small amount of friction in exactly
+   * the place where friction is worth paying for.
+   */
+  const ALLOWED_RUNTIME_PACKAGES = new Set([
+    'react',
+    'react-dom',
+    'framer-motion',
+    '@supabase/supabase-js',
+    '@radix-ui/react-collapsible',
+    '@radix-ui/react-radio-group',
+    '@radix-ui/react-tabs',
+    '@radix-ui/react-slot',
+  ]);
+
+  /**
+   * Permitted in a `*.test.ts` and nowhere else.
+   *
+   * These never reach a member's browser, so they are not a §3.5 concern — but an import of
+   * `vitest` from a component would ship a test framework in the bundle, so the separation is
+   * enforced rather than assumed.
+   */
+  const ALLOWED_TEST_ONLY_PACKAGES = new Set(['vitest', 'fast-check']);
+
+  const isTestFile = (file: string): boolean => /\.test\.tsx?$/.test(file);
+
+  it('admits no undeclared third-party package into the bundle', () => {
+    const violations: string[] = [];
+
+    for (const file of files) {
+      for (const specifier of importSpecifiers(readFileSync(file, 'utf8'))) {
+        if (specifier.startsWith('.') || specifier.startsWith('@/')) continue;
+        const bare = packageOf(specifier);
+
+        // Node builtins are not bundled — Vite resolves them away or the file is test-only.
+        if (bare.startsWith('node:')) continue;
+        if (ALLOWED_RUNTIME_PACKAGES.has(bare)) continue;
+        if (ALLOWED_TEST_ONLY_PACKAGES.has(bare) && isTestFile(file)) continue;
+
+        violations.push(`${rel(file)} → ${specifier}`);
+      }
+    }
+
+    expect(
+      violations,
+      'undeclared third-party import(s). Every package that reaches a member’s browser is ' +
+        'named in ALLOWED_RUNTIME_PACKAGES in this file. If this dependency belongs here, add ' +
+        'it — deliberately, having decided what it sends and to whom (§3.5).',
+    ).toEqual([]);
+  });
+
+  it('names only packages that are actually installed', () => {
+    // Otherwise the allowlist rots into a list of things nobody uses, and the next person
+    // reading it cannot tell which entries are load-bearing.
+    const manifest = JSON.parse(
+      readFileSync(fileURLToPath(new URL('../../package.json', import.meta.url)), 'utf8'),
+    ) as { dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
+    const installed = new Set([
+      ...Object.keys(manifest.dependencies ?? {}),
+      ...Object.keys(manifest.devDependencies ?? {}),
+    ]);
+
+    const phantom = [...ALLOWED_RUNTIME_PACKAGES, ...ALLOWED_TEST_ONLY_PACKAGES].filter(
+      (pkg) => !installed.has(pkg),
+    );
+    expect(phantom, `allowlisted but not in package.json: ${phantom.join(', ')}`).toEqual([]);
   });
 });
